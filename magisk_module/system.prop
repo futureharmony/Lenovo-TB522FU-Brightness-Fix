@@ -1,0 +1,7 @@
+ro.panel.pad_compact_scale=1.0
+
+# 禁用全局 HDR 与 Ultra HDR (ProXDR) 压暗机制，适配 LCD 全局背光特性
+ro.surface_flinger.has_HDR_display=false
+persist.sys.feature.uhdr.support=false
+persist.sys.feature.hdr_vision_app=0
+persist.sys.feature.localhdr_version=0
