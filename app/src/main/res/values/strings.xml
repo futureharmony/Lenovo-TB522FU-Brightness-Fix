@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">TB522FU 自动亮度重映射 (LSPosed)</string>
+    <string-array name="xposed_scope">
+        <item>android</item>
+        <item>com.android.systemui</item>
+    </string-array>
+</resources>
