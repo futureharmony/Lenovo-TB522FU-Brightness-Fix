@@ -1,0 +1,97 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & Publish Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Extract Version Info
+        id: meta
+        run: |
+          VERSION=$(grep '^version=' magisk_module/module.prop | cut -d= -f2 | tr -d '\r\n ')
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "SHORT_SHA=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "BUILD_TIME=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+
+      - name: Build Magisk / KernelSU Module Zip
+        run: |
+          chmod +x build_zip.sh
+          ./build_zip.sh
+
+      - name: Build LSPosed Xposed Module APK
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          APK_SRC=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          if [ -n "$APK_SRC" ]; then
+            cp "$APK_SRC" "./Lenovo-TB522FU-Brightness-LSPosed-${{ steps.meta.outputs.VERSION }}.apk"
+            echo "✅ Built APK: Lenovo-TB522FU-Brightness-LSPosed-${{ steps.meta.outputs.VERSION }}.apk"
+          else
+            echo "❌ APK build output not found!"
+            exit 1
+          fi
+
+      - name: Generate Changelog and Release Notes
+        run: |
+          cat << 'END_NOTES' > release_body.md
+          ## 📱 联想拯救者 Y900 13英寸二代 (TB522FU) - 自动亮度优化套件
+
+          本发布包由 GitHub Actions 自动化 CI/CD 构建并发布。
+
+          ### 📦 包含构建产物
+          1. **`Lenovo-TB522FU-Brightness-Fix-*.zip`**
+             * **适用环境**：KernelSU / APatch / Magisk 模块
+             * **特性**：
+               - 开机自愈看门狗（Bootloop Watchdog & Auto-Fallback），异常启动 2 次自动熔断禁用，绝不卡 Logo。
+               - 内置交互式 WebUI 控制台，支持高频环境光、物理背光与滑块位置动态遥测。
+               - SELinux 安全沙盒规整，彻底防止 WebView 崩溃。
+             * **使用方法**：直接在 KernelSU / APatch / Magisk 管理器中选择“从本地安装”。
+          2. **`Lenovo-TB522FU-Brightness-LSPosed-*.apk`**
+             * **适用环境**：LSPosed / Xposed 框架
+             * **特性**：零文件篡改，直接在内存层拦截并重映射 ColorOS 16 `OplusDisplaySplineManager` 样条曲线。
+             * **使用方法**：安装 APK 并在 LSPosed 管理器中勾选“系统框架 (android)”，重启系统生效。
+
+          ---
+          * **适配设备**：联想拯救者 Y900 13英寸二代 (Lenovo TB522FU)
+          * **适配系统**：ColorOS 16 (Android 16)
+          * **构建提交**：`${{ steps.meta.outputs.SHORT_SHA }}`
+          * **构建时间**：`${{ steps.meta.outputs.BUILD_TIME }}`
+          END_NOTES
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.VERSION }}
+          name: "Release ${{ steps.meta.outputs.VERSION }}"
+          body_path: release_body.md
+          draft: false
+          prerelease: false
+          files: |
+            Lenovo-TB522FU-Brightness-Fix-*.zip
+            Lenovo-TB522FU-Brightness-LSPosed-*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
