@@ -1,0 +1,6 @@
+id=tb522fu_brightness_fix
+name=TB522FU 自动亮度曲线优化模块
+version=v2.2
+versionCode=4
+author=Antigravity
+description=针对联想 TB522FU 深度优化 ColorOS 原生自动亮度映射表，支持原生 WebUI 4段调控与滑块居中校准

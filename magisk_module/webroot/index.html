@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TB522FU 滑块与实际亮度映射工作台</title>
+    <style>
+        :root {
+            /* 默认深色主题 (Dark Mode) */
+            --bg: #090a0f;
+            --surface: #12141c;
+            --surface-hover: #191c28;
+            --border: #202432;
+            --border-subtle: #171a24;
+            --text-primary: #f4f5f8;
+            --text-secondary: #8c94a8;
+            --text-muted: #565e72;
+            --emerald: #10b981;
+            --amber: #f59e0b;
+            --accent: #e4e4e7;
+            --btn-primary-bg: #27272a;
+            --btn-primary-border: #3f3f46;
+            --btn-primary-text: #ffffff;
+            --console-bg: #06070a;
+            --console-text: #94a3b8;
+            --tip-bg: #191c28;
+            --tip-border: #171a24;
+            --tip-highlight: #ffffff;
+            --radius-md: 10px;
+            --radius-lg: 14px;
+        }
+
+        /* 自动检测系统亮色模式 (Light Mode) */
+        @media (prefers-color-scheme: light) {
+            :root:not([data-theme="dark"]) {
+                --bg: #f4f5f8;
+                --surface: #ffffff;
+                --surface-hover: #f1f3f7;
+                --border: #e2e5eb;
+                --border-subtle: #eaedf2;
+                --text-primary: #0f172a;
+                --text-secondary: #475569;
+                --text-muted: #94a3b8;
+                --emerald: #059669;
+                --amber: #d97706;
+                --accent: #0f172a;
+                --btn-primary-bg: #0f172a;
+                --btn-primary-border: #1e293b;
+                --btn-primary-text: #ffffff;
+                --console-bg: #f1f5f9;
+                --console-text: #334155;
+                --tip-bg: #f1f3f7;
+                --tip-border: #e2e5eb;
+                --tip-highlight: #0f172a;
+            }
+        }
+
+        /* 手动强制亮色模式 */
+        :root[data-theme="light"] {
+            --bg: #f4f5f8;
+            --surface: #ffffff;
+            --surface-hover: #f1f3f7;
+            --border: #e2e5eb;
+            --border-subtle: #eaedf2;
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --text-muted: #94a3b8;
+            --emerald: #059669;
+            --amber: #d97706;
+            --accent: #0f172a;
+            --btn-primary-bg: #0f172a;
+            --btn-primary-border: #1e293b;
+            --btn-primary-text: #ffffff;
+            --console-bg: #f1f5f9;
+            --console-text: #334155;
+            --tip-bg: #f1f3f7;
+            --tip-border: #e2e5eb;
+            --tip-highlight: #0f172a;
+        }
+
+        /* 手动强制深色模式 */
+        :root[data-theme="dark"] {
+            --bg: #090a0f;
+            --surface: #12141c;
+            --surface-hover: #191c28;
+            --border: #202432;
+            --border-subtle: #171a24;
+            --text-primary: #f4f5f8;
+            --text-secondary: #8c94a8;
+            --text-muted: #565e72;
+            --emerald: #10b981;
+            --amber: #f59e0b;
+            --accent: #e4e4e7;
+            --btn-primary-bg: #27272a;
+            --btn-primary-border: #3f3f46;
+            --btn-primary-text: #ffffff;
+            --console-bg: #06070a;
+            --console-text: #94a3b8;
+            --tip-bg: #191c28;
+            --tip-border: #171a24;
+            --tip-highlight: #ffffff;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "PingFang SC", sans-serif;
+            min-height: 100vh;
+            padding: 16px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .mono {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
+
+        .app-shell {
+            width: 100%;
+            max-width: 920px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        /* 顶栏 */
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+        }
+
+        .brand-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .device-badge {
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.6px;
+            background: var(--surface-hover);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-subtle);
+            padding: 2px 7px;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+
+        .title-text {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .top-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .theme-toggle-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            background: var(--surface-hover);
+            padding: 5px 10px;
+            border-radius: 20px;
+            border: 1px solid var(--border-subtle);
+            cursor: pointer;
+        }
+
+        .theme-toggle-btn:hover {
+            border-color: var(--border);
+            color: var(--text-primary);
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            background: var(--surface-hover);
+            padding: 5px 12px;
+            border-radius: 20px;
+            border: 1px solid var(--border-subtle);
+            cursor: pointer;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--emerald);
+        }
+
+        /* 实况数据指标条 */
+        .telemetry-bar {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        .tele-item {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 10px 14px;
+        }
+
+        .tele-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-bottom: 2px;
+        }
+
+        .tele-val {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        /* 核心画布卡片 */
+        .canvas-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 16px 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .card-header-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .current-tip-box {
+            font-size: 12px;
+            color: var(--text-secondary);
+            background: var(--tip-bg);
+            padding: 4px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--tip-border);
+        }
+
+        .current-tip-box span {
+            color: var(--tip-highlight);
+            font-weight: 600;
+        }
+
+        .canvas-box {
+            width: 100%;
+            position: relative;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        #curve-canvas {
+            width: 100%;
+            height: 380px;
+            display: block;
+            cursor: crosshair;
+        }
+
+        .canvas-footer-hints {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11px;
+            color: var(--text-muted);
+            padding: 0 4px;
+        }
+
+        /* 快捷操作底栏 */
+        .actions-card {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .btn {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            padding: 13px 18px;
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            font-weight: 600;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--btn-primary-bg);
+            color: var(--btn-primary-text);
+            border-color: var(--btn-primary-border);
+        }
+
+        .btn-primary:hover {
+            opacity: 0.9;
+        }
+
+        .btn-secondary {
+            background: var(--surface);
+            color: var(--text-primary);
+            border-color: var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--surface-hover);
+        }
+
+        .btn-danger {
+            grid-column: span 2;
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+            border-color: rgba(239, 68, 68, 0.25);
+        }
+
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.18);
+        }
+
+        .console-box {
+            background: var(--console-bg);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 10px 12px;
+            font-size: 11px;
+            color: var(--console-text);
+            height: 72px;
+            overflow-y: auto;
+            line-height: 1.45;
+        }
+
+        /* 预设与微调控制区 */
+        .custom-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 14px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .panel-title {
+            font-size: 13px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .preset-pills {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .preset-pill {
+            padding: 6px 12px;
+            background: var(--surface-hover);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            font-size: 12px;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .preset-pill:hover, .preset-pill.active {
+            background: var(--btn-primary-bg);
+            color: var(--btn-primary-text);
+            border-color: var(--btn-primary-border);
+        }
+
+        .anchors-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+        }
+
+        .anchor-card {
+            background: var(--bg);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 10px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            transition: all 0.15s ease;
+        }
+
+        .anchor-card.highlight {
+            border-color: rgba(245, 158, 11, 0.45);
+            background: rgba(245, 158, 11, 0.04);
+        }
+
+        .anchor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .anchor-tag {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: var(--surface);
+            color: var(--amber);
+        }
+
+        .anchor-body {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+        }
+
+        .anchor-btn {
+            width: 32px;
+            height: 30px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text-primary);
+            font-size: 16px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .anchor-btn:active {
+            background: var(--surface-hover);
+            transform: scale(0.95);
+        }
+
+        .anchor-val {
+            font-size: 13px;
+            font-weight: 700;
+            text-align: center;
+            color: var(--text-primary);
+            min-width: 55px;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="app-shell">
+        <!-- 顶栏 -->
+        <div class="top-bar">
+            <div class="brand-title">
+                <span class="device-badge mono">TB522FU</span>
+                <span class="title-text">滑块位置 (X) 与 实际发光 (Y) 直觉映射台</span>
+            </div>
+            <div class="top-controls">
+                <div class="theme-toggle-btn mono" id="theme-btn" onclick="toggleTheme()" title="切换明暗色彩主题">
+                    <span id="theme-icon">🌓</span>
+                    <span id="theme-text">自动</span>
+                </div>
+                <div class="status-pill" onclick="refreshStatus()" title="点击刷新设备实况">
+                    <span class="status-dot"></span>
+                    <span id="als-status-text" class="mono">传感器在线</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 实时数据微型条 -->
+        <div class="telemetry-bar">
+            <div class="tele-item">
+                <div class="tele-label">环境光照度 (Lux)</div>
+                <div class="tele-val mono" id="tele-lux">--</div>
+            </div>
+            <div class="tele-item">
+                <div class="tele-label">面板实际物理背光</div>
+                <div class="tele-val mono" id="tele-hw">-- / 4095</div>
+            </div>
+            <div class="tele-item">
+                <div class="tele-label">控制栏滑块实际位置</div>
+                <div class="tele-val mono" id="tele-slider">-- %</div>
+            </div>
+        </div>
+
+        <!-- 核心交互式坐标轴卡片 -->
+        <div class="canvas-card">
+            <div class="card-header-bar">
+                <div class="card-title">
+                    <span>🎯 按住曲线上任意点直接拖动 (上拖变亮，下拖变柔)</span>
+                </div>
+                <div class="current-tip-box mono" id="interactive-tip">
+                    拖拽曲线上任意点即可直接弯曲
+                </div>
+            </div>
+
+            <!-- 画布 -->
+            <div class="canvas-box">
+                <canvas id="curve-canvas"></canvas>
+            </div>
+
+            <div class="canvas-footer-hints mono">
+                <span>横坐标 (X)：控制栏滑块 UI 值 (0% ~ 100%)</span>
+                <span>纵坐标 (Y)：实际发光亮度 (0 ~ 1100 Nit，782为常规SDR满格)</span>
+            </div>
+        </div>
+
+
+        <!-- 曲线精细调节与场景预设卡片 -->
+        <div class="custom-panel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span>🎛️ 曲线核心锚点精细微调</span>
+                    <span style="font-size: 11px; color: var(--text-muted); font-weight: normal;">(支持点击微调或在上方直接拖拽)</span>
+                </div>
+                <div class="preset-pills mono">
+                    <button class="preset-pill active" onclick="applyPreset('planA', this)">🌟 方案A基准 (30% ⟶ 350N)</button>
+                    <button class="preset-pill" onclick="applyPreset('bright', this)">☀️ 通透偏好 (35% ⟶ 400N)</button>
+                    <button class="preset-pill" onclick="applyPreset('soft', this)">🌙 柔和偏好 (25% ⟶ 280N)</button>
+                </div>
+            </div>
+
+            <!-- 5个核心锚点调节网格 -->
+            <div class="anchors-grid" id="anchors-grid">
+                <!-- JS 动态渲染 -->
+            </div>
+        </div>
+
+        <!-- 快捷操作栏 -->
+        <div class="actions-card">
+            <button class="btn btn-secondary" id="btn-test-preview" onclick="testCurrentCurve()">
+                <span>👁️</span> 实时试戴当前曲线
+            </button>
+            <button class="btn btn-secondary" onclick="resetToBalanced()">
+                <span>↩️</span> 重置为方案 A 基准线 (30% ⟶ 350N)
+            </button>
+            <button class="btn btn-primary" style="grid-column: span 2;" onclick="saveCurveToSystem()">
+                <span>💾</span> 保存并写入此曲线到系统
+            </button>
+            <button class="btn btn-danger" onclick="rebootDevice()">
+                <span>🔄</span> 重启平板以生效底层曲线
+            </button>
+        </div>
+
+        <!-- 执行日志 -->
+        <div class="console-box mono" id="console-log">Ready. 请直接在上方坐标图曲线上点击或拖拽修改形状...</div>
+    </div>
+
+    <script>
+        const MAX_NIT = 1100.0;     // 硬件峰值极值 1100 Nit (HBM)
+        const MAX_SDR_NIT = 782.0; // 常规模式上限 782 Nit
+
+        // 曲线控制点数组 [{ slider: X (0~100), nit: Y (0~1100) }]
+        let points = [
+            { slider: 0,   nit: 20 },
+            { slider: 15,  nit: 150 },
+            { slider: 30,  nit: 350 }, // 核心室内基准点: 滑块在 30% 时输出 350 Nit
+            { slider: 60,  nit: 550 }, // 亮光照明点: 滑块在 60% 时输出 550 Nit
+            { slider: 100, nit: 782 }  // 常规满格: 滑块 100% 对应常规满格 782 Nit
+        ];
+
+        let liveState = { lux: 15, nit: 360, sliderPct: 55 };
+        let isTesting = false;
+
+        // 主题模式控制: auto | light | dark
+        let userTheme = localStorage.getItem('tb522fu_theme') || 'auto';
+
+        function applyTheme(theme) {
+            userTheme = theme;
+            localStorage.setItem('tb522fu_theme', theme);
+
+            const iconEl = document.getElementById('theme-icon');
+            const textEl = document.getElementById('theme-text');
+
+            if (theme === 'auto') {
+                document.documentElement.removeAttribute('data-theme');
+                if (iconEl) iconEl.innerText = '🌓';
+                if (textEl) textEl.innerText = '自动';
+            } else if (theme === 'light') {
+                document.documentElement.setAttribute('data-theme', 'light');
+                if (iconEl) iconEl.innerText = '☀️';
+                if (textEl) textEl.innerText = '浅色';
+            } else if (theme === 'dark') {
+                document.documentElement.setAttribute('data-theme', 'dark');
+                if (iconEl) iconEl.innerText = '🌙';
+                if (textEl) textEl.innerText = '深色';
+            }
+
+            drawGraph();
+            renderAnchorCards();
+        }
+
+        function toggleTheme() {
+            if (userTheme === 'auto') applyTheme('light');
+            else if (userTheme === 'light') applyTheme('dark');
+            else applyTheme('auto');
+        }
+
+        function isDarkModeActive() {
+            const attr = document.documentElement.getAttribute('data-theme');
+            if (attr === 'dark') return true;
+            if (attr === 'light') return false;
+            return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        }
+
+        // 监听系统主题自动切换
+        if (window.matchMedia) {
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+                if (userTheme === 'auto') {
+                    drawGraph();
+                }
+            });
+        }
+
+        function log(msg) {
+            const el = document.getElementById('console-log');
+            const time = new Date().toLocaleTimeString();
+            el.innerText += `\n[${time}] ${msg}`;
+            el.scrollTop = el.scrollHeight;
+        }
+
+        // KernelSU 核心执行桥接 (支持 KernelSU WebUI 与本地 HTTP API 双通道)
+        function ksuExec(cmd) {
+            return new Promise((resolve) => {
+                if (typeof ksu !== 'undefined' && ksu.exec) {
+                    const cb = 'cb_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+                    window[cb] = function(errno, stdout, stderr) {
+                        delete window[cb];
+                        resolve({ errno, stdout, stderr });
+                    };
+                    ksu.exec(cmd, '{}', cb);
+                } else {
+                    fetch('/api/exec', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ cmd: cmd })
+                    })
+                    .then(res => res.json())
+                    .then(data => resolve(data))
+                    .catch(err => {
+                        resolve({ errno: -1, stdout: '', stderr: err.message || 'API 请求失败' });
+                    });
+                }
+            });
+        }
+
+        function ksuToast(msg) {
+            if (typeof ksu !== 'undefined' && ksu.toast) {
+                ksu.toast(msg);
+            } else {
+                log(msg);
+            }
+        }
+
+        // ==================== 自适应色彩坐标系渲染 ====================
+        const canvas = document.getElementById('curve-canvas');
+        const ctx = canvas.getContext('2d');
+        let isDragging = false;
+        let activePointIdx = -1;
+
+        function getPadding() {
+            return { left: 62, right: 36, top: 32, bottom: 38 };
+        }
+
+        function sliderToPixelX(slider, pad, plotW) {
+            return pad.left + (slider / 100.0) * plotW;
+        }
+
+        function nitToPixelY(nit, pad, plotH) {
+            return pad.top + (1.0 - (nit / MAX_NIT)) * plotH;
+        }
+
+        function pixelXToSlider(px, pad, plotW) {
+            let ratio = (px - pad.left) / plotW;
+            return Math.min(100, Math.max(0, Math.round(ratio * 100)));
+        }
+
+        function pixelYToNit(py, pad, plotH) {
+            let ratio = 1.0 - ((py - pad.top) / plotH);
+            return Math.min(MAX_NIT, Math.max(0, Math.round(ratio * MAX_NIT)));
+        }
+
+        function evaluateNitAtSlider(samples, querySlider) {
+            if (querySlider <= samples[0].slider) return samples[0].nit;
+            if (querySlider >= samples[samples.length - 1].slider) return samples[samples.length - 1].nit;
+
+            for (let i = 0; i < samples.length - 1; i++) {
+                let p0 = samples[i];
+                let p1 = samples[i + 1];
+                if (querySlider >= p0.slider && querySlider <= p1.slider) {
+                    let t = (querySlider - p0.slider) / (p1.slider - p0.slider);
+                    let smoothT = t * t * (3 - 2 * t);
+                    return Math.round(p0.nit + (p1.nit - p0.nit) * smoothT);
+                }
+            }
+            return 360;
+        }
+
+        function drawGraph() {
+            const rect = canvas.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+
+            const W = rect.width;
+            const H = rect.height;
+            const pad = getPadding();
+            const plotW = W - pad.left - pad.right;
+            const plotH = H - pad.top - pad.bottom;
+
+            const isDark = isDarkModeActive();
+
+            // 主题自适应调色板
+            const colors = {
+                canvasBg: isDark ? '#06070a' : '#ffffff',
+                gridLine: isDark ? '#181b24' : '#e2e8f0',
+                axisBorder: isDark ? '#27272a' : '#cbd5e1',
+                textMuted: isDark ? '#52525b' : '#64748b',
+                textHighlight: isDark ? '#f4f4f5' : '#0f172a',
+                curveLine: isDark ? '#f4f4f5' : '#0f172a',
+                gradStart: isDark ? 'rgba(244, 244, 245, 0.14)' : 'rgba(15, 23, 42, 0.09)',
+                gradEnd: isDark ? 'rgba(244, 244, 245, 0.00)' : 'rgba(15, 23, 42, 0.00)',
+                hbmFill: isDark ? 'rgba(245, 158, 11, 0.06)' : 'rgba(245, 158, 11, 0.08)',
+                hbmBorder: isDark ? '#2c251e' : '#fed7aa',
+                hbmText: isDark ? 'rgba(245, 158, 11, 0.7)' : '#b45309',
+                nodeCircle: isDark ? '#e4e4e7' : '#0f172a',
+                nodeBorder: isDark ? '#090a0f' : '#ffffff',
+                nodeGlow: isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(15, 23, 42, 0.12)'
+            };
+
+            ctx.clearRect(0, 0, W, H);
+
+            // 填充画布底色
+            ctx.fillStyle = colors.canvasBg;
+            ctx.fillRect(0, 0, W, H);
+
+            // 1. 绘制顶部 HBM 阳光激发区背景微光 (782 ~ 1100 Nit)
+            const ySdr = nitToPixelY(MAX_SDR_NIT, pad, plotH);
+            ctx.fillStyle = colors.hbmFill;
+            ctx.fillRect(pad.left, pad.top, plotW, ySdr - pad.top);
+
+            ctx.font = '10px ui-monospace, monospace';
+            ctx.fillStyle = colors.hbmText;
+            ctx.textAlign = 'right';
+            ctx.fillText('☀️ 强光激发峰值区 (HBM)', pad.left + plotW - 10, pad.top + 16);
+
+            // 2. 绘制网格与刻度
+            ctx.lineWidth = 1;
+            ctx.font = '11px ui-monospace, monospace';
+
+            // 水平网格 (Y 轴: 物理亮度 0, 200, 400, 600, 782, 1100 Nit)
+            const yTicks = [
+                { val: 0, label: '0' },
+                { val: 200, label: '200' },
+                { val: 400, label: '400' },
+                { val: 600, label: '600' },
+                { val: 782, label: '782(SDR)' },
+                { val: 1100, label: '1100' }
+            ];
+
+            yTicks.forEach(item => {
+                const y = nitToPixelY(item.val, pad, plotH);
+                ctx.beginPath();
+                ctx.moveTo(pad.left, y);
+                ctx.lineTo(pad.left + plotW, y);
+                ctx.strokeStyle = (item.val === 782) ? colors.hbmBorder : colors.gridLine;
+                ctx.stroke();
+
+                ctx.textAlign = 'right';
+                ctx.fillStyle = (item.val === 782) ? '#f59e0b' : ((item.val === 1100) ? colors.hbmText : colors.textMuted);
+                ctx.fillText(item.label, pad.left - 8, y + 4);
+            });
+
+            // 垂直网格 (X 轴: 控制栏滑块 0%, 25%, 50%, 75%, 100%)
+            const xTicks = [
+                { val: 0, label: '0%' },
+                { val: 25, label: '25%' },
+                { val: 50, label: '50% 居中' },
+                { val: 75, label: '75%' },
+                { val: 100, label: '100% 满格' }
+            ];
+
+            xTicks.forEach(item => {
+                const x = sliderToPixelX(item.val, pad, plotW);
+                ctx.beginPath();
+                ctx.moveTo(x, pad.top);
+                ctx.lineTo(x, pad.top + plotH);
+                ctx.strokeStyle = (item.val === 50) ? colors.axisBorder : colors.gridLine;
+                ctx.stroke();
+
+                ctx.textAlign = (item.val === 0) ? 'left' : ((item.val === 100) ? 'right' : 'center');
+                ctx.fillStyle = (item.val === 50) ? colors.textHighlight : colors.textMuted;
+                ctx.fillText(item.label, x, pad.top + plotH + 18);
+            });
+
+            // 坐标系外框
+            ctx.strokeStyle = colors.axisBorder;
+            ctx.strokeRect(pad.left, pad.top, plotW, plotH);
+
+            // 3. 绘制发光曲线 (X: 滑块 0 -> 100)
+            ctx.beginPath();
+            const step = 2;
+            let first = true;
+            for (let s = 0; s <= 100; s += step) {
+                let px = sliderToPixelX(s, pad, plotW);
+                let nit = evaluateNitAtSlider(points, s);
+                let py = nitToPixelY(nit, pad, plotH);
+                if (first) {
+                    ctx.moveTo(px, py);
+                    first = false;
+                } else {
+                    ctx.lineTo(px, py);
+                }
+            }
+            ctx.strokeStyle = colors.curveLine;
+            ctx.lineWidth = 3.2;
+            ctx.stroke();
+
+            // 曲线下方区域填充
+            ctx.lineTo(pad.left + plotW, pad.top + plotH);
+            ctx.lineTo(pad.left, pad.top + plotH);
+            ctx.closePath();
+            const fillGrad = ctx.createLinearGradient(0, pad.top, 0, pad.top + plotH);
+            fillGrad.addColorStop(0, colors.gradStart);
+            fillGrad.addColorStop(1, colors.gradEnd);
+            ctx.fillStyle = fillGrad;
+            ctx.fill();
+
+            // 4. 绘制当前设备物理实况指示 (绿点十字线)
+            if (liveState.nit >= 0) {
+                let curX = sliderToPixelX(liveState.sliderPct, pad, plotW);
+                let curY = nitToPixelY(liveState.nit, pad, plotH);
+
+                ctx.beginPath();
+                ctx.setLineDash([2, 2]);
+                ctx.moveTo(curX, pad.top);
+                ctx.lineTo(curX, pad.top + plotH);
+                ctx.moveTo(pad.left, curY);
+                ctx.lineTo(pad.left + plotW, curY);
+                ctx.strokeStyle = 'rgba(16, 185, 129, 0.45)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                ctx.beginPath();
+                ctx.arc(curX, curY, 5.5, 0, Math.PI * 2);
+                ctx.fillStyle = '#10b981';
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            }
+
+            // 5. 绘制可拖拽控制节点
+            points.forEach((pt, idx) => {
+                const px = sliderToPixelX(pt.slider, pad, plotW);
+                const py = nitToPixelY(pt.nit, pad, plotH);
+
+                // 外层光晕
+                ctx.beginPath();
+                ctx.arc(px, py, (idx === 2) ? 11 : 8, 0, Math.PI * 2);
+                ctx.fillStyle = (idx === 2) ? 'rgba(245, 158, 11, 0.3)' : colors.nodeGlow;
+                ctx.fill();
+
+                // 核心实心圆
+                ctx.beginPath();
+                ctx.arc(px, py, (idx === 2) ? 6 : 5, 0, Math.PI * 2);
+                ctx.fillStyle = (idx === 2) ? '#f59e0b' : colors.nodeCircle;
+                ctx.fill();
+                ctx.strokeStyle = colors.nodeBorder;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // 节点数值便签
+                ctx.font = '10px ui-monospace, monospace';
+                ctx.fillStyle = (idx === 2) ? '#f59e0b' : colors.textMuted;
+                ctx.textAlign = (idx === 0) ? 'left' : ((idx === points.length - 1) ? 'right' : 'center');
+                ctx.fillText(`${pt.nit} Nit`, px, py - 12);
+            });
+        }
+
+        // ==================== 直接在曲线上点击/按住拖拽交互 ====================
+        function getCanvasPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        canvas.addEventListener('pointerdown', (e) => {
+            const pos = getCanvasPos(e);
+            const pad = getPadding();
+            const plotW = canvas.clientWidth - pad.left - pad.right;
+            const plotH = canvas.clientHeight - pad.top - pad.bottom;
+
+            let foundIdx = -1;
+            let minDist = 32;
+            points.forEach((pt, idx) => {
+                const px = sliderToPixelX(pt.slider, pad, plotW);
+                const py = nitToPixelY(pt.nit, pad, plotH);
+                const dist = Math.hypot(pos.x - px, pos.y - py);
+                if (dist < minDist) {
+                    minDist = dist;
+                    foundIdx = idx;
+                }
+            });
+
+            if (foundIdx === -1) {
+                const clickSlider = pixelXToSlider(pos.x, pad, plotW);
+                const clickNit = pixelYToNit(pos.y, pad, plotH);
+
+                let bestIdx = 2;
+                let bestDiff = 9999;
+                for (let i = 1; i < points.length - 1; i++) {
+                    let diff = Math.abs(points[i].slider - clickSlider);
+                    if (diff < bestDiff) {
+                        bestDiff = diff;
+                        bestIdx = i;
+                    }
+                }
+                foundIdx = bestIdx;
+                points[foundIdx].nit = clickNit;
+            }
+
+            isDragging = true;
+            activePointIdx = foundIdx;
+            canvas.setPointerCapture(e.pointerId);
+            onPointMove(pos, pad, plotW, plotH);
+        });
+
+        function onPointMove(pos, pad, plotW, plotH) {
+            if (!isDragging || activePointIdx === -1) return;
+
+            let newSlider = pixelXToSlider(pos.x, pad, plotW);
+            let newNit = pixelYToNit(pos.y, pad, plotH);
+
+            if (activePointIdx === 0) {
+                points[0].slider = 0;
+                points[0].nit = Math.min(80, Math.max(5, newNit));
+            } else if (activePointIdx === points.length - 1) {
+                points[activePointIdx].slider = 100;
+                points[activePointIdx].nit = Math.min(MAX_NIT, Math.max(700, newNit));
+            } else {
+                let prevSlider = points[activePointIdx - 1].slider;
+                let nextSlider = points[activePointIdx + 1].slider;
+                let prevNit = points[activePointIdx - 1].nit;
+                let nextNit = points[activePointIdx + 1].nit;
+
+                points[activePointIdx].slider = Math.min(nextSlider - 4, Math.max(prevSlider + 4, newSlider));
+                points[activePointIdx].nit = Math.min(nextNit - 10, Math.max(prevNit + 10, newNit));
+            }
+
+            const p = points[activePointIdx];
+            document.getElementById('interactive-tip').innerHTML = 
+                `当前调节点: 控制栏滑块 <span>${p.slider}%</span> ⟶ 输出实际发光 <span>${p.nit} Nit</span>`;
+
+            drawGraph();
+            renderAnchorCards();
+        }
+
+        canvas.addEventListener('pointermove', (e) => {
+            if (!isDragging) return;
+            const pos = getCanvasPos(e);
+            const pad = getPadding();
+            const plotW = canvas.clientWidth - pad.left - pad.right;
+            const plotH = canvas.clientHeight - pad.top - pad.bottom;
+            onPointMove(pos, pad, plotW, plotH);
+        });
+
+        canvas.addEventListener('pointerup', (e) => {
+            if (isDragging) {
+                isDragging = false;
+                activePointIdx = -1;
+                try { canvas.releasePointerCapture(e.pointerId); } catch(err){}
+                log("曲线形状调整完成！");
+                if (isTesting) {
+                    let liveNit = points[2].nit;
+                    ksuExec(`/data/adb/modules/tb522fu_brightness_fix/apply_curve.sh test ${liveNit}`).then(() => refreshStatus());
+                }
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            drawGraph();
+            renderAnchorCards();
+        });
+
+        // ==================== 快捷操作与实测 ====================
+        
+        function renderAnchorCards() {
+            const container = document.getElementById('anchors-grid');
+            if (!container) return;
+            
+            const titles = [
+                { name: '极暗底线', tag: '0 Lux' },
+                { name: '舒适微光', tag: '3 Lux' },
+                { name: '室内日常', tag: '10 Lux 核心' },
+                { name: '办公透亮', tag: '50 Lux' },
+                { name: '强光满格', tag: '8600 Lux' }
+            ];
+
+            let html = '';
+            points.forEach((pt, idx) => {
+                const info = titles[idx] || { name: `节点 ${idx+1}`, tag: '' };
+                const isHighlight = (idx === 2);
+                html += `
+                    <div class="anchor-card ${isHighlight ? 'highlight' : ''}">
+                        <div class="anchor-header">
+                            <span>${info.name} (<b>${pt.slider}%</b>)</span>
+                            <span class="anchor-tag mono">${info.tag}</span>
+                        </div>
+                        <div class="anchor-body">
+                            <button class="anchor-btn mono" onclick="stepAnchor(${idx}, -10)">−</button>
+                            <span class="anchor-val mono">${pt.nit} N</span>
+                            <button class="anchor-btn mono" onclick="stepAnchor(${idx}, 10)">+</button>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function stepAnchor(idx, delta) {
+            if (idx < 0 || idx >= points.length) return;
+            let minLimit = (idx === 0) ? 5 : points[idx-1].nit + 5;
+            let maxLimit = (idx === points.length - 1) ? 1100 : points[idx+1].nit - 5;
+            
+            let target = points[idx].nit + delta;
+            points[idx].nit = Math.min(maxLimit, Math.max(minLimit, target));
+            
+            renderAnchorCards();
+            drawGraph();
+            log(`已微调「${idx === 2 ? '室内日常 30%' : '滑块 ' + points[idx].slider + '%'}」发光为 ${points[idx].nit} Nit`);
+            if (isTesting) {
+                ksuExec(`/data/adb/modules/tb522fu_brightness_fix/apply_curve.sh test ${points[2].nit}`).then(() => refreshStatus());
+            }
+        }
+
+        function applyPreset(type, el) {
+            document.querySelectorAll('.preset-pill').forEach(btn => btn.classList.remove('active'));
+            if (el) el.classList.add('active');
+
+            if (type === 'planA') {
+                points = [
+                    { slider: 0,   nit: 20 },
+                    { slider: 15,  nit: 150 },
+                    { slider: 30,  nit: 350 },
+                    { slider: 60,  nit: 550 },
+                    { slider: 100, nit: 782 }
+                ];
+                log("已加载【方案 A 推荐基准】：室内 10 Lux ⟶ 滑块 30% ⟶ 350 Nit");
+            } else if (type === 'bright') {
+                points = [
+                    { slider: 0,   nit: 25 },
+                    { slider: 15,  nit: 180 },
+                    { slider: 30,  nit: 400 },
+                    { slider: 60,  nit: 620 },
+                    { slider: 100, nit: 800 }
+                ];
+                log("已加载【通透偏好预设】：室内 10 Lux ⟶ 滑块 30% ⟶ 400 Nit");
+            } else if (type === 'soft') {
+                points = [
+                    { slider: 0,   nit: 15 },
+                    { slider: 15,  nit: 120 },
+                    { slider: 30,  nit: 280 },
+                    { slider: 60,  nit: 480 },
+                    { slider: 100, nit: 750 }
+                ];
+                log("已加载【柔和护眼预设】：室内 10 Lux ⟶ 滑块 30% ⟶ 280 Nit");
+            }
+            renderAnchorCards();
+            drawGraph();
+            renderAnchorCards();
+        }
+
+        function resetToBalanced() {
+            points = [
+                { slider: 0,   nit: 20 },
+                { slider: 15,  nit: 150 },
+                { slider: 30,  nit: 350 },
+                { slider: 60,  nit: 550 },
+                { slider: 100, nit: 782 }
+            ];
+            document.getElementById('interactive-tip').innerHTML = "已重置为三级联动基准线 (滑块 30% 对应 350 Nit)";
+            drawGraph();
+            log("已恢复三级联动基准线 (滑块 30% 对应 350 Nit)。");
+        }
+
+        async function testCurrentCurve() {
+            const btn = document.getElementById('btn-test-preview');
+            if (isTesting) {
+                log("正在恢复系统自动亮度接管...");
+                await ksuExec("/data/adb/modules/tb522fu_brightness_fix/apply_curve.sh restore");
+                isTesting = false;
+                if (btn) btn.innerHTML = '<span>👁️</span> 实时试戴当前曲线';
+                ksuToast("已恢复自动调光");
+                refreshStatus();
+                return;
+            }
+
+            let testNit = points[2].nit;
+            log(`正在切换屏幕硬件背光进行试戴: 室内基准 ${testNit} Nit...`);
+            const res = await ksuExec(`/data/adb/modules/tb522fu_brightness_fix/apply_curve.sh test ${testNit}`);
+            if (res.stdout) log(res.stdout);
+
+            isTesting = true;
+            if (btn) btn.innerHTML = '<span>🟢</span> 试戴中 (点击恢复自动)';
+            ksuToast(`屏幕已切换为 ${testNit} Nit，可观察发光是否舒适`);
+            refreshStatus();
+        }
+
+        async function saveCurveToSystem() {
+            log("正在根据当前自定义曲线采样 15 点底层映射并写入系统...");
+
+            let n0 = points[0].nit;
+            let n10 = evaluateNitAtSlider(points, points[2].slider);
+            let n100 = evaluateNitAtSlider(points, points[3].slider);
+            let n8600 = points[points.length - 1].nit;
+
+            let p0 = n0;
+            let p2 = Math.round(n0 + (n10 - n0) * 0.35);
+            let p4 = Math.round(n0 + (n10 - n0) * 0.60);
+            let p6 = Math.round(n0 + (n10 - n0) * 0.80);
+            let p8 = Math.round(n0 + (n10 - n0) * 0.92);
+            let p10 = n10;
+            let p15 = Math.round(n10 + (n100 - n10) * 0.20);
+            let p20 = Math.round(n10 + (n100 - n10) * 0.35);
+            let p30 = Math.round(n10 + (n100 - n10) * 0.60);
+            let p50 = Math.round(n10 + (n100 - n10) * 0.85);
+            let p100 = n100;
+            let p500 = Math.round(n100 + (n8600 - n100) * 0.50);
+            let p1000 = Math.round(n100 + (n8600 - n100) * 0.80);
+            let p5000 = Math.round(n100 + (n8600 - n100) * 0.95);
+
+            let cmd = `/data/adb/modules/tb522fu_brightness_fix/apply_curve.sh raw ${p0} ${p2} ${p4} ${p6} ${p8} ${p10} ${p15} ${p20} ${p30} ${p50} ${p100} ${p500} ${p1000} ${p5000} ${n8600}`;
+            
+            const res = await ksuExec(cmd);
+            if (res.stdout) log(res.stdout);
+            if (res.stderr) log(res.stderr);
+
+            if (res.errno === 0) {
+                ksuToast("曲线配置保存成功！请点击「重启平板」加载生效。");
+            } else {
+                ksuToast("保存失败，详情请查看控制台日志。");
+            }
+        }
+
+        async function rebootDevice() {
+            if (confirm("确定要立即重启平板以生效底层曲线吗？")) {
+                log("正在重启平板...");
+                await ksuExec("reboot");
+            }
+        }
+
+        let isPolling = false;
+        async function refreshStatus() {
+            if (isPolling) return;
+            isPolling = true;
+            try {
+                const res = await ksuExec("sh /data/adb/modules/tb522fu_brightness_fix/get_telemetry.sh");
+                if (res && res.stdout) {
+                    const parts = res.stdout.trim().split('|');
+                    if (parts.length >= 3) {
+                        const luxVal = parseFloat(parts[0]);
+                        const hwVal = parseInt(parts[1]);
+                        const brtVal = parseFloat(parts[2]);
+
+                        if (!isNaN(luxVal)) {
+                            liveState.lux = luxVal;
+                            const elLux = document.getElementById('tele-lux');
+                            if (elLux) elLux.innerText = `${liveState.lux.toFixed(1)} Lux`;
+                        }
+
+                        if (!isNaN(hwVal)) {
+                            const elHw = document.getElementById('tele-hw');
+                            if (elHw) elHw.innerText = `${hwVal} / 4095`;
+                            liveState.nit = Math.round((hwVal / 4095) * MAX_SDR_NIT);
+                        }
+
+                        if (!isNaN(brtVal)) {
+                            // ColorOS 16 10240阶线性标尺: 222 (0%) -> 10239 (100%)
+                            liveState.sliderPct = Math.max(0, Math.min(100, Math.round(((brtVal - 222) / 10017) * 100)));
+                            const elSlider = document.getElementById('tele-slider');
+                            if (elSlider) elSlider.innerText = `${liveState.sliderPct} %`;
+                        }
+
+                        if (!isDragging) {
+                            drawGraph();
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("telemetry error:", e);
+            } finally {
+                isPolling = false;
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            if (typeof ksu !== 'undefined' && ksu.fullScreen) {
+                ksu.fullScreen(true);
+            }
+            applyTheme(userTheme);
+            renderAnchorCards();
+            refreshStatus();
+
+            // 启动 1 秒实时动态刷新传感器照度、硬件背光与滑块位置
+            setInterval(refreshStatus, 1000);
+        });
+    </script>
+</body>
+</html>
