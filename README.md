@@ -1,6 +1,6 @@
 # Lenovo TB522FU 自动亮度修复套件 (Lenovo-TB522FU-Brightness-Fix)
 
-专为**联想小新 Pad Pro (Lenovo TB522FU)** 移植 **ColorOS 16 (Android 16)** 打造的自动调光曲线与 10240 阶滑块重映射完整解决方案。
+专为**联想拯救者 Y900 13英寸二代 (Lenovo TB522FU)** 移植 **ColorOS 16 (Android 16)** 打造的自动调光曲线与 10240 阶滑块重映射完整解决方案。
 
 ---
 
