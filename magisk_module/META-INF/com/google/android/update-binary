@@ -1,0 +1,17 @@
+#!/sbin/sh
+#################
+# Magisk / KernelSU / APatch Module Installer
+#################
+OUTFD=$2
+ZIPFILE=$3
+
+ui_print() {
+  echo "$1"
+}
+
+# If flashed from recovery (TWRP/OrangeFox)
+MODDIR="/data/adb/modules/tb522fu_brightness_fix"
+mkdir -p "$MODDIR"
+unzip -o "$ZIPFILE" -x 'META-INF/*' -d "$MODDIR"
+chmod 755 "$MODDIR"/*.sh 2>/dev/null
+exit 0
