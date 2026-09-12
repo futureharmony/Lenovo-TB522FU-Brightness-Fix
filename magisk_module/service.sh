@@ -30,3 +30,8 @@ else
     settings put global user_disabled_hdr_formats "" 2>/dev/null
     setprop persist.sys.feature.uhdr.support true 2>/dev/null
 fi
+
+# ==================== 用户自定义曲线开机自愈对齐 ====================
+if [ -f "$MODDIR/custom_points.json" ]; then
+    sh "$MODDIR/apply_curve.sh" json "$MODDIR/custom_points.json" >/dev/null 2>&1
+fi

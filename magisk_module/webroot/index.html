@@ -1252,7 +1252,7 @@
             renderAnchorCards();
         }
 
-        function resetToBalanced() {
+        async function resetToBalanced() {
             points = [
                 { slider: 0,   nit: 20 },
                 { slider: 15,  nit: 150 },
@@ -1260,9 +1260,14 @@
                 { slider: 60,  nit: 550 },
                 { slider: 100, nit: 782 }
             ];
+            localStorage.removeItem('tb522fu_custom_points');
+            await ksuExec("rm -f /data/adb/modules/tb522fu_brightness_fix/custom_points.json");
+            await ksuExec("/data/adb/modules/tb522fu_brightness_fix/apply_curve.sh balanced");
             document.getElementById('interactive-tip').innerHTML = "已重置为三级联动基准线 (滑块 30% 对应 350 Nit)";
             drawGraph();
-            log("已恢复三级联动基准线 (滑块 30% 对应 350 Nit)。");
+            renderAnchorCards();
+            log("已恢复三级联动官方基准线 (滑块 30% 对应 350 Nit)，底层已对齐！");
+            ksuToast("已重置为官方基准线 (350 Nit)");
         }
 
         async function testCurrentCurve() {
@@ -1311,6 +1316,12 @@
             let p1000 = Math.round(n100 + (n8600 - n100) * 0.80);
             let p5000 = Math.round(n100 + (n8600 - n100) * 0.95);
 
+            // 1. 持久化保存用户自定义锚点，解决重启后被硬编码默认值 350 重置的问题
+            const pointsJson = JSON.stringify(points);
+            localStorage.setItem('tb522fu_custom_points', pointsJson);
+            await ksuExec(`echo '${pointsJson}' > /data/adb/modules/tb522fu_brightness_fix/custom_points.json`);
+
+            // 2. 写入底层 XML 映射系统
             let cmd = `/data/adb/modules/tb522fu_brightness_fix/apply_curve.sh raw ${p0} ${p2} ${p4} ${p6} ${p8} ${p10} ${p15} ${p20} ${p30} ${p50} ${p100} ${p500} ${p1000} ${p5000} ${n8600}`;
             
             const res = await ksuExec(cmd);
@@ -1318,7 +1329,7 @@
             if (res.stderr) log(res.stderr);
 
             if (res.errno === 0) {
-                ksuToast("曲线配置保存成功！请点击「重启平板」加载生效。");
+                ksuToast("曲线配置已永久保存！重启后将自动维持该设置。");
             } else {
                 ksuToast("保存失败，详情请查看控制台日志。");
             }
@@ -1418,12 +1429,46 @@
             }
         }
 
-        window.addEventListener('DOMContentLoaded', () => {
+        async function loadCustomPoints() {
+            try {
+                const res = await ksuExec("cat /data/adb/modules/tb522fu_brightness_fix/custom_points.json 2>/dev/null");
+                if (res && res.stdout && res.stdout.trim().startsWith('[')) {
+                    const loaded = JSON.parse(res.stdout.trim());
+                    if (Array.isArray(loaded) && loaded.length === 5) {
+                        points = loaded;
+                        localStorage.setItem('tb522fu_custom_points', JSON.stringify(points));
+                        renderAnchorCards();
+                        drawGraph();
+                        log("已成功加载用户自定义曲线 (室内基准: " + points[2].nit + " Nit)");
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.warn("load custom points from file failed:", e);
+            }
+
+            const savedLocal = localStorage.getItem('tb522fu_custom_points');
+            if (savedLocal) {
+                try {
+                    const loaded = JSON.parse(savedLocal);
+                    if (Array.isArray(loaded) && loaded.length === 5) {
+                        points = loaded;
+                        renderAnchorCards();
+                        drawGraph();
+                        log("从本地缓存恢复自定义曲线 (室内基准: " + points[2].nit + " Nit)");
+                        return;
+                    }
+                } catch (e) {}
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
             if (typeof ksu !== 'undefined' && ksu.fullScreen) {
                 ksu.fullScreen(true);
             }
             applyTheme(userTheme);
             renderAnchorCards();
+            await loadCustomPoints();
             refreshStatus();
             checkHdrStatus();
 

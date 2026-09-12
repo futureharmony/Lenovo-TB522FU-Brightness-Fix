@@ -42,6 +42,53 @@ case "$MODE" in
         echo "SUCCESS: 已恢复自动亮度托管"
         exit 0
         ;;
+    "json")
+        JSON_FILE="${2:-$MODDIR/custom_points.json}"
+        if [ -f "$JSON_FILE" ]; then
+            POINTS_VAL=$(awk '
+            function get_val(s, key, arr) {
+                if (match(s, "\"" key "\"[ ]*:[ ]*([0-9.]+)")) {
+                    sub(/.*"nit"[ ]*:[ ]*/, "", s);
+                    sub(/[^0-9.].*/, "", s);
+                    return s;
+                }
+                return "";
+            }
+            { json = json $0 }
+            END {
+                n = split(json, items, "}");
+                for (i = 1; i <= n; i++) {
+                    nit = get_val(items[i], "nit");
+                    if (nit != "") {
+                        printf "%.2f ", nit;
+                    }
+                }
+            }' "$JSON_FILE")
+            set -- $POINTS_VAL
+            if [ $# -ge 5 ]; then
+                N_0=$1; N_10=$3; N_100=$4; N_8600=$5
+                P_0=$N_0
+                P_2=$(awk -v n0="$N_0" -v n10="$N_10" 'BEGIN { printf "%.2f", n0 + (n10 - n0)*0.35 }')
+                P_4=$(awk -v n0="$N_0" -v n10="$N_10" 'BEGIN { printf "%.2f", n0 + (n10 - n0)*0.60 }')
+                P_6=$(awk -v n0="$N_0" -v n10="$N_10" 'BEGIN { printf "%.2f", n0 + (n10 - n0)*0.80 }')
+                P_8=$(awk -v n0="$N_0" -v n10="$N_10" 'BEGIN { printf "%.2f", n0 + (n10 - n0)*0.92 }')
+                P_10=$N_10
+                P_15=$(awk -v n10="$N_10" -v n100="$N_100" 'BEGIN { printf "%.2f", n10 + (n100 - n10)*0.20 }')
+                P_20=$(awk -v n10="$N_10" -v n100="$N_100" 'BEGIN { printf "%.2f", n10 + (n100 - n10)*0.35 }')
+                P_30=$(awk -v n10="$N_10" -v n100="$N_100" 'BEGIN { printf "%.2f", n10 + (n100 - n10)*0.60 }')
+                P_50=$(awk -v n10="$N_10" -v n100="$N_100" 'BEGIN { printf "%.2f", n10 + (n100 - n10)*0.85 }')
+                P_100=$N_100
+                P_500=$(awk -v n100="$N_100" -v n8600="$N_8600" 'BEGIN { printf "%.2f", n100 + (n8600 - n100)*0.50 }')
+                P_1000=$(awk -v n100="$N_100" -v n8600="$N_8600" 'BEGIN { printf "%.2f", n100 + (n8600 - n100)*0.80 }')
+                P_5000=$(awk -v n100="$N_100" -v n8600="$N_8600" 'BEGIN { printf "%.2f", n100 + (n8600 - n100)*0.95 }')
+                P_8600=$N_8600
+            else
+                P_0=2; P_2=20; P_4=60; P_6=130; P_8=230; P_10=350; P_15=390; P_20=420; P_30=460; P_50=510; P_100=570; P_500=640; P_1000=700; P_5000=750; P_8600=782
+            fi
+        else
+            P_0=2; P_2=20; P_4=60; P_6=130; P_8=230; P_10=350; P_15=390; P_20=420; P_30=460; P_50=510; P_100=570; P_500=640; P_1000=700; P_5000=750; P_8600=782
+        fi
+        ;;
     "raw")
         P_0=${2:-2}
         P_2=${3:-20}
