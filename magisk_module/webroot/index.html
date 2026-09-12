@@ -490,6 +490,113 @@
             min-width: 55px;
         }
 
+        .hdr-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 16px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: all 0.2s ease;
+        }
+
+        .hdr-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .hdr-title {
+            font-size: 13px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-primary);
+        }
+
+        .hdr-status-badge {
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+
+        .hdr-status-badge.blocked {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--emerald);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .hdr-status-badge.unblocked {
+            background: rgba(140, 148, 168, 0.15);
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+
+        .hdr-body {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .hdr-desc {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            flex: 1;
+        }
+
+        .switch-box {
+            position: relative;
+            display: inline-block;
+            width: 52px;
+            height: 28px;
+            flex-shrink: 0;
+        }
+
+        .switch-box input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .switch-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: var(--border);
+            transition: .25s ease;
+            border-radius: 28px;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .switch-slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background-color: #ffffff;
+            transition: .25s ease;
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        input:checked + .switch-slider {
+            background-color: var(--emerald);
+        }
+
+        input:checked + .switch-slider:before {
+            transform: translateX(24px);
+        }
+
     </style>
 </head>
 <body>
@@ -568,6 +675,29 @@
             <!-- 5个核心锚点调节网格 -->
             <div class="anchors-grid" id="anchors-grid">
                 <!-- JS 动态渲染 -->
+            </div>
+        </div>
+
+        <!-- LCD HDR 智能屏蔽控制卡片 -->
+        <div class="hdr-card">
+            <div class="hdr-header">
+                <div class="hdr-title">
+                    <span>🛡️ LCD 防暗盾 (系统级 HDR / Ultra HDR 屏蔽)</span>
+                </div>
+                <div class="hdr-status-badge mono blocked" id="hdr-badge">
+                    🛡️ 已开启屏蔽 (LCD 护眼防暗)
+                </div>
+            </div>
+            <div class="hdr-body">
+                <div class="hdr-desc">
+                    针对 ColorOS 移植系统误将 OLED 专属的 EDR 局部高光/压暗算法施加在 LCD 全局背光上的问题。<br>
+                    <strong>开启屏蔽（推荐 LCD）</strong>：彻底消除小红书大图、B站等全屏浏览时全局背光暴跌变暗发灰，即时生效；<br>
+                    <strong>关闭屏蔽</strong>：恢复系统原生 HDR / ProXDR 格式解码支持。
+                </div>
+                <label class="switch-box" title="点击切换 HDR 屏蔽状态">
+                    <input type="checkbox" id="hdr-switch" checked onchange="toggleHdrBlocking(this.checked)">
+                    <span class="switch-slider"></span>
+                </label>
             </div>
         </div>
 
@@ -1245,6 +1375,49 @@
             }
         }
 
+        async function checkHdrStatus() {
+            try {
+                const res = await ksuExec("sh /data/adb/modules/tb522fu_brightness_fix/hdr_control.sh status");
+                if (res && res.stdout) {
+                    const data = JSON.parse(res.stdout.trim());
+                    updateHdrUi(data.blocked);
+                }
+            } catch (e) {
+                console.warn("HDR status check error:", e);
+            }
+        }
+
+        function updateHdrUi(isBlocked) {
+            const sw = document.getElementById('hdr-switch');
+            const badge = document.getElementById('hdr-badge');
+            if (sw) sw.checked = isBlocked;
+            if (badge) {
+                if (isBlocked) {
+                    badge.className = "hdr-status-badge mono blocked";
+                    badge.innerText = "🛡️ 已开启屏蔽 (LCD 护眼防暗)";
+                } else {
+                    badge.className = "hdr-status-badge mono unblocked";
+                    badge.innerText = "⚪ 已放行 HDR (原始画质)";
+                }
+            }
+        }
+
+        async function toggleHdrBlocking(enable) {
+            const action = enable ? 'enable' : 'disable';
+            const logEl = document.getElementById('console-log');
+            if (logEl) logEl.innerText = `正在${enable ? '开启' : '关闭'}系统级 HDR 屏蔽策略...`;
+            try {
+                const res = await ksuExec(`sh /data/adb/modules/tb522fu_brightness_fix/hdr_control.sh ${action}`);
+                if (res && res.stdout) {
+                    const data = JSON.parse(res.stdout.trim());
+                    updateHdrUi(data.blocked);
+                    if (logEl) logEl.innerText = data.message || `HDR 屏蔽策略设置完成！`;
+                }
+            } catch (e) {
+                if (logEl) logEl.innerText = `设置失败: ${e.message || e}`;
+            }
+        }
+
         window.addEventListener('DOMContentLoaded', () => {
             if (typeof ksu !== 'undefined' && ksu.fullScreen) {
                 ksu.fullScreen(true);
@@ -1252,6 +1425,7 @@
             applyTheme(userTheme);
             renderAnchorCards();
             refreshStatus();
+            checkHdrStatus();
 
             // 启动 1 秒实时动态刷新传感器照度、硬件背光与滑块位置
             setInterval(refreshStatus, 1000);

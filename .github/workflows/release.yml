@@ -3,6 +3,7 @@ name: Build and Release
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*' ]
   workflow_dispatch:
 
 permissions:
@@ -44,9 +45,11 @@ jobs:
           * **`Lenovo-TB522FU-Brightness-Fix-${{ steps.meta.outputs.VERSION }}.zip`**
             - **适用环境**：KernelSU / APatch / Magisk 模块
             - **核心特性**：
-              - 开机自愈看门狗（Bootloop Watchdog & Auto-Fallback），异常启动 2 次自动熔断禁用，绝不卡 Logo。
-              - 内置交互式 WebUI 控制台，支持高频环境光、物理背光与滑块位置动态遥测。
-              - SELinux 安全沙盒规整，彻底防止 WebView 崩溃。
+              - **LCD 防暗盾 (系统级 HDR/Ultra HDR 智能屏蔽与 WebUI 热开关)**：彻底消除小红书大图、B站等全屏浏览时全局背光暴跌变暗发灰，WebUI 支持一键开/关并持久化记忆。
+              - **屏幕硬件配置 ID 动态探测与自适应**：解除对特定 display_id 文件名的硬编码死绑，自动匹配设备真实硬件面板配置，跨屏幕批次及适配机型通用。
+              - **开机自愈看门狗（Bootloop Watchdog & Auto-Fallback）**：异常启动 2 次自动熔断禁用，绝不卡 Logo。
+              - **交互式 WebUI 控制台**：支持高频环境光、物理背光与滑块位置动态遥测及贝塞尔曲线拖拽调节。
+              - **SELinux 安全沙盒规整**：彻底防止 WebView 崩溃。
             - **使用方法**：直接在 KernelSU / APatch / Magisk 管理器中选择“从本地安装”，重启后生效。
 
           ---

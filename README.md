@@ -26,9 +26,13 @@
 6. **刷入前环境与字节码机制嗅探（Pre-install Sanity & Dex Check）**：
    * 安装器在刷入写入前自动执行硬件面板、ColorOS 系统架构、核心服务包（`oplus-services.jar`）Dex 字节码特征（`OplusDisplaySplineManager`）以及系统目标配置完整性校验；
    * 若环境不匹配或缺少预定调光机制，立即安全熔断终止（Abort），一条文件都不写入，杜绝不知情用户误刷。
-7. **LCD 全局背光适配与 HDR/EDR 误压暗屏蔽（LCD-friendly HDR/EDR Shield）**：
+7. **LCD 全局背光适配与 HDR 智能防暗盾（LCD HDR Shield & WebUI Toggle）**：
    * 彻底解决 ColorOS 移植系统将 OLED 专用的 EDR 局部高光/压暗算法施加在 LCD 面板上，导致打开小红书大图、B站等 Ultra HDR (ProXDR) 内容时全局背光暴跌（如降至 2 Nit）严重发灰发暗的问题；
-   * 从属性层、DisplayConfig XML 配置层与系统服务层三级联动，锁定 HDR 比率为 1.000 并全局屏蔽不兼容的 HDR 压暗模式，保护全局背光始终充沛饱满。
+   * 在 WebUI 工作台中提供一键式 Toggle 开关，支持即时免重启热切换【开启屏蔽（LCD 推荐）】与【放行 HDR】；
+   * 状态开机自动记忆持久化，三级联动锁定压暗比例为 1.000。
+8. **屏幕硬件配置 ID 动态嗅探与全自适应（Dynamic Display ID Matching）**：
+   * 彻底解除对特定屏幕面板文件名（如 `display_id_4630947077023927187.xml`）的硬编码死绑；
+   * 安装器、开机挂载引擎及曲线热套用引擎全部升级为动态通配探测，自动匹配目标系统中真实的硬件面板配置文件名，跨屏幕供应商批次与跨机型自适应通用。
 
 ---
 
@@ -43,13 +47,14 @@ Lenovo-TB522FU-Brightness-Fix/
 ├── build_zip.sh                    # 本地一键打包 Magisk / KernelSU 即刷包脚本
 └── magisk_module/                  # KernelSU / APatch / Magisk 模块工程目录
     ├── module.prop                 # 模块元数据定义
-    ├── customize.sh                # 刷入前环境嗅探与字节码机制拦截脚本
-    ├── post-fs-data.sh             # 开机看门狗探测、SELinux 规整与 4 级联动 XML 挂载
-    ├── service.sh                  # 开机平稳运行检测与看门狗解除机制
+    ├── customize.sh                # 刷入前环境嗅探与真实面板 ID 动态绑定脚本
+    ├── post-fs-data.sh             # 开机看门狗探测、SELinux 规整与动态 ID 多级 XML 挂载
+    ├── service.sh                  # 开机平稳运行检测与 HDR 策略状态恢复机制
+    ├── hdr_control.sh              # WebUI 系统级 HDR 屏蔽/恢复热切换控制引擎
     ├── apply_curve.sh              # 10240 阶单调递增曲线计算与热套用引擎
     ├── get_telemetry.sh            # 30ms 毫秒级环境光/物理背光/滑块实时遥测接口
     ├── system.prop                 # 系统属性参数
-    └── webroot/index.html          # 交互式曲线可视化拖拽调节 WebUI 页面
+    └── webroot/index.html          # 交互式曲线可视化与 HDR 智能开关 WebUI 页面
 ```
 
 ---

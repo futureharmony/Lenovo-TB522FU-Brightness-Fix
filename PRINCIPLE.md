@@ -121,8 +121,8 @@ $$\forall i > 0, \quad x[i] - x[i-1] \ge \epsilon, \quad y[i] - y[i-1] \ge \epsi
 为了避免不知情用户在非移植版 ColorOS 或其他不兼容机型上盲目刷入导致异常，安装包通过 `customize.sh` 与 `update-binary` 部署了 4 道前置“防刷错拦截闸门”：
 
 ### 6.1 四重前置校验闸门
-1. **硬件面板配置指纹校验**：
-   * 检测 `/vendor/etc/displayconfig/display_id_4630947077023927187.xml` 是否存在。该文件严格绑定拯救者 Y900 13英寸二代（TB522FU）的屏幕控制器；若不存在立即终止安装。
+1. **硬件面板配置动态嗅探与自适应（Dynamic Display ID Matching）**：
+   * 自动探测 `/vendor/etc/displayconfig/display_id_*.xml`。该文件记录底层屏幕物理控制器参数；安装器会自动匹配真实面板 ID，并在模块内自动生成同名副本与动态多点挂载，消除硬件批次与跨机型限制。
 2. **系统架构与系统指纹校验**：
    * 探测 `ro.build.version.oplusrom`、`ro.oplus.version.my_manifest` 以及 `/my_product` 挂载点，确保运行在真实的 ColorOS / Oplus 体系下。
 3. **核心服务字节码深度嗅探（Dex Inspection 探针）**：
@@ -131,3 +131,17 @@ $$\forall i > 0, \quad x[i] - x[i-1] \ge \epsilon, \quad y[i] - y[i-1] \ge \epsi
    * 探测 ColorOS 原生的自动亮度样条管理类 `OplusDisplaySplineManager` 与 `OplusSpline` 字节码符号。若 ROM 经过极度精简或更换为 AOSP 显示服务，安装器立即主动熔断（`abort`），一条模块文件都不会写入设备！
 4. **目标挂载点完整性校验**：
    * 检查原厂 `/system_ext/etc/display_brightness_config_default.xml` 与 `/system/etc/display_brightness_config_common.xml` 是否齐全，确保 `mount -o bind` 目标点有效。
+
+---
+
+## 7. LCD 全局背光与 OLED EDR 压暗冲突原理及智能防暗盾
+
+### 7.1 物理与算法冲突根因
+* **OLED 单像素发光**：ColorOS 原生机型大多为 OLED 屏幕，在遇到 Ultra HDR（ProXDR）图层时，底层画质引擎 `OplusFeatureEdrEnhanceBrightness` 会执行 **SDR Dimming（基底压暗）**。它将全局背光降低至数个 Nit（例如在 `display_id_*.xml` 中将 `hdrRatio` 定为 8.0，导致背光被除以 8），从而利用 OLED 单像素点亮的超高峰值（1000~2000 Nit）与极黑背景制造强烈对比。
+* **LCD 全局背光**：LCD 屏幕只有一个全局统一的背光源。当 ColorOS 的 EDR 引擎将背光暴跌压暗至 222 阶（2.0 Nit）时，由于缺乏像素级控光能力，整块液晶面板整体瞬间变灰变暗，产生严重观感恶化。
+
+### 7.2 三级立体防护与 WebUI 动态开关
+1. **服务层（cmd display）**：通过 `cmd display set-user-disabled-hdr-types 1 2 3 4` 屏蔽 HDR10、HLG、HDR10+、Dolby Vision 解码。
+2. **合成层（SurfaceFlinger & Props）**：通过 `persist.sys.feature.uhdr.support=false` 与 `ro.surface_flinger.has_HDR_display=false` 关闭 ProXDR 支持。
+3. **驱动比率死锁（XML）**：在面板配置中将 `<sdrHdrRatioMap>` 内部 `hdrRatio` 全部锁定为 `1.000`，杜绝任何除法压暗。
+4. **WebUI 免重启热控制**：内置 `hdr_control.sh` 引擎，允许用户在可视化面板上一键切换【开启屏蔽（LCD推荐）】与【放行 HDR】，开机状态自动记忆。

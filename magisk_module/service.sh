@@ -17,6 +17,16 @@ rm -f "$MODDIR/.boot_crash_count"
 # 关闭低电量节电模式干扰
 settings put global low_power 0 2>/dev/null
 
-# 全局关闭系统级 HDR / Ultra HDR 格式支持（1=HDR10, 2=HLG, 3=HDR10+, 4=Dolby Vision）
-cmd display set-user-disabled-hdr-types 1 2 3 4 2>/dev/null
-settings put global user_disabled_hdr_formats "1,2,3,4" 2>/dev/null
+# 全局 LCD HDR / Ultra HDR 智能屏蔽策略 (适配用户偏好)
+if [ ! -f "$MODDIR/.hdr_unblocked" ]; then
+    # 默认或用户选择开启屏蔽: 保护 LCD 全局背光
+    cmd display set-user-disabled-hdr-types 1 2 3 4 2>/dev/null
+    settings put global user_disabled_hdr_formats "1,2,3,4" 2>/dev/null
+    setprop persist.sys.feature.uhdr.support false 2>/dev/null
+    touch "$MODDIR/.hdr_blocked"
+else
+    # 用户在 WebUI 中显式选择了恢复 HDR
+    cmd display set-user-disabled-hdr-types "" 2>/dev/null
+    settings put global user_disabled_hdr_formats "" 2>/dev/null
+    setprop persist.sys.feature.uhdr.support true 2>/dev/null
+fi

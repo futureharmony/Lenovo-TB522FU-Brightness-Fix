@@ -8,8 +8,12 @@ ORIG_XML="/system/etc/display_brightness_config_common.xml"
 TARGET_XML="$MODDIR/system/etc/display_brightness_config_common.xml"
 ORIG_PD_XML="/my_product/vendor/etc/display_brightness_config_P_D.xml"
 TARGET_PD_XML="$MODDIR/my_product/vendor/etc/display_brightness_config_P_D.xml"
-ORIG_DISP_XML="/vendor/etc/displayconfig/display_id_4630947077023927187.xml"
-TARGET_DISP_XML="$MODDIR/vendor/etc/displayconfig/display_id_4630947077023927187.xml"
+SYS_DISP=$(ls /vendor/etc/displayconfig/display_id_*.xml 2>/dev/null | head -n 1)
+ORIG_DISP_XML="${SYS_DISP:-/vendor/etc/displayconfig/display_id_4630947077023927187.xml}"
+TARGET_DISP_XML="$MODDIR/vendor/etc/displayconfig/$(basename "$ORIG_DISP_XML")"
+if [ ! -f "$TARGET_DISP_XML" ]; then
+    TARGET_DISP_XML="$MODDIR/vendor/etc/displayconfig/display_id_4630947077023927187.xml"
+fi
 ORIG_DEF_XML="/system_ext/etc/display_brightness_config_default.xml"
 TARGET_DEF_XML="$MODDIR/system_ext/etc/display_brightness_config_default.xml"
 

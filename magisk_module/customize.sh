@@ -10,15 +10,22 @@ ui_print "***************************************************"
 
 ui_print "- 正在进行前置环境与 ColorOS 调光机制嗅探..."
 
-# 1. 硬件面板配置校验 (确认是 TB522FU 拯救者 Y900 13英寸二代)
-PANEL_CFG="/vendor/etc/displayconfig/display_id_4630947077023927187.xml"
-if [ ! -f "$PANEL_CFG" ]; then
-    ui_print "❌ [错误] 未检测到 TB522FU 专属屏幕面板配置: $PANEL_CFG"
-    ui_print "👉 本模块专为联想拯救者 Y900 13英寸二代 (TB522FU) 设计。"
+# 1. 硬件面板配置动态嗅探与自适应
+PANEL_CFG=""
+for cfg in /vendor/etc/displayconfig/display_id_*.xml; do
+    if [ -f "$cfg" ]; then
+        PANEL_CFG="$cfg"
+        break
+    fi
+done
+
+if [ -z "$PANEL_CFG" ]; then
+    ui_print "❌ [错误] 未在 /vendor/etc/displayconfig/ 中检测到任何屏幕面板配置！"
+    ui_print "👉 本模块需要设备具备标准的 DisplayDeviceConfig 屏幕配置文件。"
     ui_print "👉 为防止屏幕背光与调光异常，已安全中止刷入！"
-    abort "环境不兼容，终止安装。"
+    abort "未检测到屏幕配置文件，终止安装。"
 fi
-ui_print "  [✓] 硬件面板校验通过: 检测到 TB522FU 专属显示配置"
+ui_print "  [✓] 硬件面板校验通过: 检测到真实屏幕配置 $(basename "$PANEL_CFG")"
 
 # 2. 系统版本与架构指纹校验 (确认是 ColorOS / Oplus 架构)
 IS_OPLUS=false
@@ -75,10 +82,18 @@ if [ ! -f "$DEF_XML" ] || [ ! -f "$COMMON_XML" ]; then
 fi
 ui_print "  [✓] 目标挂载点完整性校验通过"
 
-# 5. 设置权限
+# 5. 自动同步真实面板配置文件名 (解除跨批次/跨设备 ID 限制)
+REAL_PANEL_NAME=$(basename "$PANEL_CFG")
+if [ -n "$REAL_PANEL_NAME" ] && [ "$REAL_PANEL_NAME" != "display_id_4630947077023927187.xml" ]; then
+    cp -f "$MODPATH/vendor/etc/displayconfig/display_id_4630947077023927187.xml" "$MODPATH/vendor/etc/displayconfig/$REAL_PANEL_NAME"
+    ui_print "  [✓] 已自动生成适配当前设备的屏幕配置: $REAL_PANEL_NAME"
+fi
+
+# 6. 设置权限
 set_perm_recursive "$MODPATH" 0 0 0755 0644
 set_perm "$MODPATH/apply_curve.sh" 0 0 0755
 set_perm "$MODPATH/get_telemetry.sh" 0 0 0755
+set_perm "$MODPATH/hdr_control.sh" 0 0 0755
 set_perm "$MODPATH/post-fs-data.sh" 0 0 0755
 set_perm "$MODPATH/service.sh" 0 0 0755
 

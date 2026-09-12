@@ -63,9 +63,12 @@ if [ -f "$SRC_PD" ] && [ -f "$TARGET_PD" ]; then
     mount -o bind "$SRC_PD" "$TARGET_PD"
 fi
 
-# 4. 屏幕面板硬件配置文件
-TARGET_DISP="/vendor/etc/displayconfig/display_id_4630947077023927187.xml"
+# 4. 屏幕面板硬件配置文件 (动态遍历挂载系统中所有的 display_id_*.xml，彻底解除特定 ID 硬编码限制)
 SRC_DISP="$MODDIR/vendor/etc/displayconfig/display_id_4630947077023927187.xml"
-if [ -f "$SRC_DISP" ] && [ -f "$TARGET_DISP" ]; then
-    mount -o bind "$SRC_DISP" "$TARGET_DISP"
+if [ -f "$SRC_DISP" ]; then
+    for target_disp in /vendor/etc/displayconfig/display_id_*.xml; do
+        if [ -f "$target_disp" ]; then
+            mount -o bind "$SRC_DISP" "$target_disp"
+        fi
+    done
 fi
