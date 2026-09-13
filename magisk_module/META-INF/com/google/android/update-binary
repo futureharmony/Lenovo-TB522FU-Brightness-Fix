@@ -115,6 +115,8 @@ _ilog() {
 }
 _ilog "======================== 安装会话开始 (update-binary) ========================"
 _ilog "设备: $(getprop ro.product.model) | ROM: $(getprop ro.build.version.oplusrom) | 指纹: $(getprop ro.build.fingerprint)"
+WV_INSTALL_INFO=$(dumpsys webviewupdate 2>/dev/null | head -n 6 | tr '\n' ' ')
+_ilog "WebView 供应商: ${WV_INSTALL_INFO:-未获取到 (可能缺少 WebView Provider, WebUI 将无法打开)}"
 
 # ============ 6. 以设备原版配置为基重建模块数据文件 (核心防卡标措施) ============
 _ilog "- 正在以设备原版配置为基重建模块数据文件..."

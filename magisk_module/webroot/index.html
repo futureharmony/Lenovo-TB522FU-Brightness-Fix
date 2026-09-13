@@ -768,12 +768,47 @@
         let liveState = { lux: 15, nit: 360, sliderPct: 55 };
         let isTesting = false;
 
+        // ==================== WebView 兼容安全层 ====================
+        // 部分管理器 (旧版 KernelSU / 第三方 KsuWebUI / 精简 ROM WebView) 可能未开启
+        // DOM storage, 直接访问 localStorage 会抛 SecurityError 并杀死整个脚本,
+        // 表现为 WebUI "打不开"。此处降级为内存存储, 保证页面永远可用。
+        const safeStore = (() => {
+            try {
+                const t = window.localStorage;
+                t.setItem('__tb522fu_probe', '1');
+                t.removeItem('__tb522fu_probe');
+                return t;
+            } catch (e) {
+                const mem = {};
+                return {
+                    getItem: (k) => (Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null),
+                    setItem: (k, v) => { mem[k] = String(v); },
+                    removeItem: (k) => { delete mem[k]; }
+                };
+            }
+        })();
+
+        // JS 原生 confirm/alert 在部分 WebView 中无 WebChromeClient 支持会被静默丢弃
+        // (confirm 永远返回 false), 改用双击确认模式, 不依赖任何弹窗能力
+        const __confirmArm = {};
+        function armedConfirm(key, msg) {
+            const now = Date.now();
+            if (__confirmArm[key] && now - __confirmArm[key] < 4000) {
+                delete __confirmArm[key];
+                return true;
+            }
+            __confirmArm[key] = now;
+            log(msg + " ⚠️ 请在 4 秒内再次点击以确认执行！");
+            ksuToast(msg + " (再次点击确认)");
+            return false;
+        }
+
         // 主题模式控制: auto | light | dark
-        let userTheme = localStorage.getItem('tb522fu_theme') || 'auto';
+        let userTheme = safeStore.getItem('tb522fu_theme') || 'auto';
 
         function applyTheme(theme) {
             userTheme = theme;
-            localStorage.setItem('tb522fu_theme', theme);
+            safeStore.setItem('tb522fu_theme', theme);
 
             const iconEl = document.getElementById('theme-icon');
             const textEl = document.getElementById('theme-text');
@@ -1291,7 +1326,7 @@
                 { slider: 60,  nit: 550 },
                 { slider: 100, nit: 782 }
             ];
-            localStorage.removeItem('tb522fu_custom_points');
+            safeStore.removeItem('tb522fu_custom_points');
             await ksuExec("rm -f /data/adb/modules/tb522fu_brightness_fix/custom_points.json");
             await ksuExec("/data/adb/modules/tb522fu_brightness_fix/apply_curve.sh balanced");
             document.getElementById('interactive-tip').innerHTML = "已重置为三级联动基准线 (滑块 30% 对应 350 Nit)";
@@ -1349,7 +1384,7 @@
 
             // 1. 持久化保存用户自定义锚点，解决重启后被硬编码默认值 350 重置的问题
             const pointsJson = JSON.stringify(points);
-            localStorage.setItem('tb522fu_custom_points', pointsJson);
+            safeStore.setItem('tb522fu_custom_points', pointsJson);
             await ksuExec(`echo '${pointsJson}' > /data/adb/modules/tb522fu_brightness_fix/custom_points.json`);
 
             // 2. 写入底层 XML 映射系统
@@ -1367,10 +1402,9 @@
         }
 
         async function rebootDevice() {
-            if (confirm("确定要立即重启平板以生效底层曲线吗？")) {
-                log("正在重启平板...");
-                await ksuExec("reboot");
-            }
+            if (!armedConfirm('reboot', "确定要立即重启平板以生效底层曲线吗？")) return;
+            log("正在重启平板...");
+            await ksuExec("reboot");
         }
 
         let isPolling = false;
@@ -1467,7 +1501,7 @@
                     const loaded = JSON.parse(res.stdout.trim());
                     if (Array.isArray(loaded) && loaded.length === 5) {
                         points = loaded;
-                        localStorage.setItem('tb522fu_custom_points', JSON.stringify(points));
+                        safeStore.setItem('tb522fu_custom_points', JSON.stringify(points));
                         renderAnchorCards();
                         drawGraph();
                         log("已成功加载用户自定义曲线 (室内基准: " + points[2].nit + " Nit)");
@@ -1478,7 +1512,7 @@
                 console.warn("load custom points from file failed:", e);
             }
 
-            const savedLocal = localStorage.getItem('tb522fu_custom_points');
+            const savedLocal = safeStore.getItem('tb522fu_custom_points');
             if (savedLocal) {
                 try {
                     const loaded = JSON.parse(savedLocal);
@@ -1575,7 +1609,7 @@
         }
 
         async function clearModuleLog() {
-            if (!confirm("确定清空模块诊断日志？清空后无法恢复。")) return;
+            if (!armedConfirm('clearLog', "确定清空模块诊断日志？清空后无法恢复。")) return;
             try {
                 await ksuExec(`> ${MODULE_DIR}/logs/module.log`);
                 log("诊断日志已清空");

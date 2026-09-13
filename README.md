@@ -21,7 +21,8 @@
    * 内置原生 WebUI 管理界面（支持 KernelSU / APatch / Magisk）；
    * 提供贝塞尔曲线 4 节点交互式拖拽画布，支持一键实时测试、套用与官方恢复；
    * 内置 1 秒高频动态遥测，实时读取环境光照度（Lux）、面板物理背光与滑块当前位置；
-   * **双重持久化与开机自愈对齐**：用户调整的锚点数值自动存入本地存储与设备端 `custom_points.json`；开机时 `service.sh` 自动读取并重对齐，彻底解决改完重启后界面被硬编码默认 350 重置的问题。
+   * **双重持久化与开机自愈对齐**：用户调整的锚点数值自动存入本地存储与设备端 `custom_points.json`；开机时 `service.sh` 自动读取并重对齐，彻底解决改完重启后界面被硬编码默认 350 重置的问题；
+   * **受限 WebView 环境兼容**：自动降级兼容未开启 DOM storage 的管理器 WebView（localStorage 异常不再导致页面脚本失效），并以内置双击确认模式替代原生弹窗，不依赖 WebChromeClient；`service.sh` 会将设备 WebView 供应商与版本写入诊断日志，便于远程定位 "WebUI 打不开 / 白屏" 类问题。
 5. **SELinux 标签合规与沙盒隔离**：
    * 彻底解决 `webview_zygote` 沙盒访问被拒绝导致浏览器闪退的问题。
 6. **刷入前环境与字节码机制嗅探（Pre-install Sanity & Dex Check）**：

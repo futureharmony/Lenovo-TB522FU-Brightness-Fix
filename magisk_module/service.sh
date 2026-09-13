@@ -23,6 +23,22 @@ blog "WATCHDOG" "系统已平稳进入桌面, 本次开机安全: 清除 .bootin
 # 记录关键挂载目标的实时校验和, 用于确认 bind mount 是否真实生效
 blog "VERIFY" "挂载目标校验和: $(md5sum /system/etc/display_brightness_config_common.xml /system_ext/etc/display_brightness_config_default.xml /vendor/etc/displayconfig/display_id_*.xml 2>/dev/null | tr '\n' ' ')"
 
+# 记录 WebView 供应商与版本 (管理器 WebUI 依赖系统 WebView, 此信息是定位
+# "WebUI 打不开 / 白屏" 类问题的关键依据)
+WV_INFO=$(dumpsys webviewupdate 2>/dev/null | head -n 8 | tr '\n' ' ')
+if [ -n "$WV_INFO" ]; then
+    blog "WEBVIEW" "WebView 供应商状态: $WV_INFO"
+else
+    blog "WEBVIEW" "警告: dumpsys webviewupdate 无输出, 系统可能缺少或损坏 WebView Provider!"
+    WV_PROBE=""
+    for p in com.google.android.webview com.android.webview com.google.android.trichromelibrary com.android.chrome; do
+        if pm path "$p" >/dev/null 2>&1; then
+            WV_PROBE="$WV_PROBE [$p 存在]"
+        fi
+    done
+    blog "WEBVIEW" "候选包探测结果: ${WV_PROBE:-未找到任何 WebView 候选包}"
+fi
+
 # 采集本启动周期内显示子系统日志 (确认挂载的配置被系统正常解析)
 LOGCAT_SNIP=$(logcat -d 2>/dev/null | grep -aiE "DisplayDeviceConfig|brightness_config|OplusDisplaySpline|BrightnessSpline" | tail -n 60)
 if [ -n "$LOGCAT_SNIP" ]; then

@@ -19,6 +19,8 @@ _ilog() {
 
 _ilog "======================== 安装会话开始 (customize.sh) ========================"
 _ilog "设备: $(getprop ro.product.model) | ROM: $(getprop ro.build.version.oplusrom) | 指纹: $(getprop ro.build.fingerprint)"
+WV_INSTALL_INFO=$(dumpsys webviewupdate 2>/dev/null | head -n 6 | tr '\n' ' ')
+_ilog "WebView 供应商: ${WV_INSTALL_INFO:-未获取到 (可能缺少 WebView Provider, WebUI 将无法打开)}"
 
 ui_print "- 正在进行前置环境与 ColorOS 调光机制嗅探..."
 
