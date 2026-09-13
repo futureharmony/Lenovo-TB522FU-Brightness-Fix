@@ -3,7 +3,34 @@
 # 核心指标: 室内 10 Lux -> 滑块 30% -> 实际发光 350 Nit
 # 严格保证: 所有控制点双向严格单调递增，杜绝 OplusSpline NaN 除零异常
 
-MODDIR="/data/adb/modules/tb522fu_brightness_fix"
+# TB_MODULE_DIR: 安装器环境下传入模块暂存路径, 正常运行时使用固定路径
+MODDIR="${TB_MODULE_DIR:-/data/adb/modules/tb522fu_brightness_fix}"
+. "$MODDIR/logger.sh" 2>/dev/null
+
+# _do_mount <描述> <src> <dst>
+_do_mount() {
+    if [ ! -f "$2" ] || [ ! -f "$3" ]; then
+        blog "MOUNT" "跳过: $1 (src 或 dst 不存在)"
+        return 1
+    fi
+    if mount -o bind "$2" "$3" 2>/dev/null; then
+        blog "MOUNT" "成功: $1"
+        return 0
+    fi
+    blog "MOUNT" "失败: $1 ($2 -> $3)"
+    return 1
+}
+
+# 从设备原版 default.xml 读取真实级别范围 (跨批次自适应, 防止硬编码 10240 与
+# 其他面板批次级别数不符导致调光引擎异常); 解析失败时回退到 TB522FU 标准值
+read_def_range() {
+    DEF_MAX=$(sed -n 's/.*max="\([0-9]*\)".*/\1/p' "$ORIG_DEF_XML" 2>/dev/null | head -n 1)
+    DEF_MIN=$(sed -n 's/.*min="\([0-9]*\)".*/\1/p' "$ORIG_DEF_XML" 2>/dev/null | head -n 1)
+    case "$DEF_MAX" in ''|*[!0-9]*|0) DEF_MAX=10239 ;; esac
+    case "$DEF_MIN" in ''|*[!0-9]*) DEF_MIN=222 ;; esac
+    if [ "$DEF_MIN" -ge "$DEF_MAX" ]; then DEF_MIN=222; DEF_MAX=10239; fi
+}
+
 ORIG_XML="/system/etc/display_brightness_config_common.xml"
 TARGET_XML="$MODDIR/system/etc/display_brightness_config_common.xml"
 ORIG_PD_XML="/my_product/vendor/etc/display_brightness_config_P_D.xml"
@@ -18,10 +45,13 @@ ORIG_DEF_XML="/system_ext/etc/display_brightness_config_default.xml"
 TARGET_DEF_XML="$MODDIR/system_ext/etc/display_brightness_config_default.xml"
 
 MODE="${1:-balanced}"
+blog_section "apply_curve 标定执行 (MODE=$MODE)"
 
 case "$MODE" in
     "test")
         NIT=${2:-350}
+        read_def_range
+        TEST_LVL=$((DEF_MIN + (DEF_MAX - DEF_MIN) * 3 / 10))
         HW_BL=$(awk -v n="$NIT" 'BEGIN {
             ratio = n / 782.0;
             if (ratio < 0.01) ratio = 0.01;
@@ -32,8 +62,9 @@ case "$MODE" in
             print hw;
         }')
         settings put system screen_brightness_mode 0
-        settings put system screen_brightness 3227
+        settings put system screen_brightness "$TEST_LVL"
         echo "$HW_BL" > /sys/class/backlight/panel0-backlight/brightness
+        blog "TEST" "试戴模式: $NIT Nit -> 硬件背光 $HW_BL/4095, 滑块置于 Level $TEST_LVL (30%)"
         echo "SUCCESS: 已硬件级直接切换屏幕物理发光至 $HW_BL/4095 ($NIT Nit)，滑块同步置于 30%"
         exit 0
         ;;
@@ -66,6 +97,7 @@ case "$MODE" in
             }' "$JSON_FILE")
             set -- $POINTS_VAL
             if [ $# -ge 5 ]; then
+                blog "APPLY-JSON" "解析自定义锚点成功 (共 $# 个值): $POINTS_VAL"
                 N_0=$1; N_10=$3; N_100=$4; N_8600=$5
                 P_0=$N_0
                 P_2=$(awk -v n0="$N_0" -v n10="$N_10" 'BEGIN { printf "%.2f", n0 + (n10 - n0)*0.35 }')
@@ -148,6 +180,7 @@ set -- $awk_validate
 P_0=$1; P_2=$2; P_4=$3; P_6=$4; P_8=$5
 P_10=$6; P_15=$7; P_20=$8; P_30=$9; P_50=${10}
 P_100=${11}; P_500=${12}; P_1000=${13}; P_5000=${14}; P_8600=${15}
+blog "APPLY" "单调钳制后 15 点标定: $P_0 $P_2 $P_4 $P_6 $P_8 $P_10 $P_15 $P_20 $P_30 $P_50 $P_100 $P_500 $P_1000 $P_5000 $P_8600"
 
 mkdir -p "$MODDIR/system/etc"
 mkdir -p "$MODDIR/system_ext/etc"
@@ -193,12 +226,22 @@ if [ -s "$TARGET_XML.tmp" ]; then
     rm -f "$TARGET_XML.tmp"
     chmod 644 "$TARGET_XML"
     chcon u:object_r:system_file:s0 "$TARGET_XML"
-    mount -o bind "$TARGET_XML" "$ORIG_XML" 2>/dev/null
+    blog "APPLY" "common.xml 标定写入成功 ($(wc -c < "$TARGET_XML") 字节, $(grep -c '<lux>' "$TARGET_XML") 个 lux 点)"
+    _do_mount "Lux-Nit 曲线 (system common)" "$TARGET_XML" "$ORIG_XML"
+else
+    blog "APPLY" "错误: common.xml 标定生成失败 (输出为空), 保留原文件不动"
 fi
 
 # 2. 写入 display_brightness_config_P_D.xml (标定 2048 级: 严格递增)
 PD_SRC="$ORIG_PD_XML"
 if [ ! -f "$PD_SRC" ]; then PD_SRC="$TARGET_PD_XML"; fi
+
+# 结构嗅探: 该表采用字面量匹配, 固件结构不同时原样保留并记录 (不强行注入)
+if grep -q '<brightness_table max="1745" min="2">' "$PD_SRC" 2>/dev/null; then
+    blog "APPLY" "P_D 结构嗅探: 匹配 1745 级标尺, 执行标定注入"
+else
+    blog "APPLY" "警告: P_D 源文件结构与本模块预期不符 (缺少 1745 级标尺头), 将原样保留以防异常"
+fi
 
 awk -v p0="$P_0" -v p30="$P_10" -v p60="550.0" -v p100="$P_8600" '
 function evaluate_nit(slider,   t, smooth_t) {
@@ -265,12 +308,22 @@ if [ -s "$TARGET_PD_XML.tmp" ]; then
     rm -f "$TARGET_PD_XML.tmp"
     chmod 644 "$TARGET_PD_XML"
     chcon u:object_r:system_file:s0 "$TARGET_PD_XML"
-    mount -o bind "$TARGET_PD_XML" "$ORIG_PD_XML" 2>/dev/null
+    blog "APPLY" "P_D 标定写入成功 ($(wc -c < "$TARGET_PD_XML") 字节, $(grep -c '<level>' "$TARGET_PD_XML") 个 level)"
+    _do_mount "P_D 次级配置" "$TARGET_PD_XML" "$ORIG_PD_XML"
+else
+    blog "APPLY" "警告: P_D 标定生成失败 (输出为空), 保留原文件不动"
 fi
 
-# 3. 写入 vendor display_id_4630947077023927187.xml (高通驱动电平三级联动)
+# 3. 写入 vendor display_id_*.xml (高通驱动电平三级联动)
 DISP_SRC="$ORIG_DISP_XML"
 if [ ! -f "$DISP_SRC" ]; then DISP_SRC="$TARGET_DISP_XML"; fi
+
+# 结构嗅探: screenBrightnessMap 结构不同时原样保留并记录
+if grep -q '<screenBrightnessMap interpolation="linear">' "$DISP_SRC" 2>/dev/null; then
+    blog "APPLY" "面板配置结构嗅探: 匹配 linear screenBrightnessMap, 目标 $(basename "$ORIG_DISP_XML")"
+else
+    blog "APPLY" "警告: 面板配置结构与本模块预期不符, 将原样保留以防 vendor 显示服务异常"
+fi
 
 awk -v p0="$P_0" -v p30="$P_10" -v p60="550.0" -v p100="$P_8600" '
 function evaluate_nit(slider,   t, smooth_t) {
@@ -323,11 +376,18 @@ if [ -s "$TARGET_DISP_XML.tmp" ]; then
     rm -f "$TARGET_DISP_XML.tmp"
     chmod 644 "$TARGET_DISP_XML"
     chcon u:object_r:vendor_configs_file:s0 "$TARGET_DISP_XML"
-    mount -o bind "$TARGET_DISP_XML" "$ORIG_DISP_XML" 2>/dev/null
+    blog "APPLY" "面板配置标定写入成功 ($(wc -c < "$TARGET_DISP_XML") 字节, $(grep -c '<nits>' "$TARGET_DISP_XML") 个采样点)"
+    _do_mount "面板配置 ($(basename "$ORIG_DISP_XML"))" "$TARGET_DISP_XML" "$ORIG_DISP_XML"
+else
+    blog "APPLY" "警告: 面板配置标定生成失败 (输出为空), 保留原文件不动"
 fi
 
-# 4. 生成 10240 阶 display_brightness_config_default.xml (将 Level 3227/30% 滑块精准锚定 350 Nit 与 1084 寄存器)
-awk -v p0="$P_0" -v p30="$P_10" -v p60="550.0" -v p100="$P_8600" '
+# 4. 生成全量程 display_brightness_config_default.xml (级别数自适应设备原版,
+#    将 30% 滑块锚定 P_10 Nit 与对应寄存器)
+read_def_range
+blog "APPLY" "default.xml 级别范围自适应: max=$DEF_MAX min=$DEF_MIN (读取自设备原版表头)"
+awk -v p0="$P_0" -v p30="$P_10" -v p60="550.0" -v p100="$P_8600" \
+    -v maxl="$DEF_MAX" -v minl="$DEF_MIN" '
 function smoothstep(t) { return t * t * (3.0 - 2.0 * t); }
 function evaluate_nit(slider,   t, st) {
     if (slider <= 0.0) return p0 + 0.0;
@@ -368,19 +428,19 @@ function evaluate_hw(slider,   t, st) {
     return 4095;
 }
 BEGIN {
-    print "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<root>\n    <!-- calibrated by futureharmony for TB522FU ColorOS 16 -->\n    <version>20260911</version>\n    <lux_table_mode>3</lux_table_mode>\n    <hbm_lux_table_mode>3</hbm_lux_table_mode>\n    <brightness_table max=\"10239\" min=\"222\">";
+    printf "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<root>\n    <!-- calibrated by futureharmony for TB522FU ColorOS 16 -->\n    <version>20260911</version>\n    <lux_table_mode>3</lux_table_mode>\n    <hbm_lux_table_mode>3</hbm_lux_table_mode>\n    <brightness_table max=\"%d\" min=\"%d\">\n", maxl, minl;
 
     prev_nit = -1.0;
-    for (L = 0; L <= 10239; L++) {
+    for (L = 0; L <= maxl; L++) {
         if (L == 0) {
             nit = 0.0; hw = 0;
-        } else if (L < 222) {
-            ratio = L / 222.0;
+        } else if (L < minl) {
+            ratio = L / (minl + 0.0);
             nit = ratio * (p0 + 0.0);
             hw = int(ratio * 8.0 + 0.5);
             if (hw < 1) hw = 1;
         } else {
-            slider = (L - 222.0) / 10017.0;
+            slider = (L - minl) / (maxl - minl);
             nit = evaluate_nit(slider);
             hw = evaluate_hw(slider);
         }
@@ -400,17 +460,23 @@ if [ -s "$TARGET_DEF_XML.tmp" ]; then
     rm -f "$TARGET_DEF_XML.tmp"
     chmod 644 "$TARGET_DEF_XML"
     chcon u:object_r:system_file:s0 "$TARGET_DEF_XML"
-    mount -o bind "$TARGET_DEF_XML" "$ORIG_DEF_XML" 2>/dev/null
+    blog "APPLY" "default.xml 标定写入成功 ($(wc -c < "$TARGET_DEF_XML") 字节, $(grep -c '<level>' "$TARGET_DEF_XML") 个 level)"
+    _do_mount "主亮度映射表 (default.xml)" "$TARGET_DEF_XML" "$ORIG_DEF_XML"
+else
+    blog "APPLY" "错误: default.xml 标定生成失败 (输出为空), 保留原文件不动"
 fi
 
 # 同步 common 到 system_ext
 cp -f "$TARGET_XML" "$MODDIR/system_ext/etc/display_brightness_config_common.xml" 2>/dev/null
-mount -o bind "$TARGET_XML" "/system_ext/etc/display_brightness_config_common.xml" 2>/dev/null
+_do_mount "Lux-Nit 曲线 (system_ext common)" "$TARGET_XML" "/system_ext/etc/display_brightness_config_common.xml"
 
-# 重置异常拖动学习缓存至 30% 黄金基准 (Level 3227)
-settings put system screen_brightness 3227
+# 重置异常拖动学习缓存至 30% 黄金基准 (级别数随设备原版自适应)
+ANCHOR_LVL=$((DEF_MIN + (DEF_MAX - DEF_MIN) * 3 / 10))
+settings put system screen_brightness "$ANCHOR_LVL"
 settings put system screen_brightness_duration 0
+blog "APPLY" "滑块学习缓存重置至 30% 基准 (Level $ANCHOR_LVL)"
 
+blog_sync
 echo "SUCCESS: 自动亮度联动映射已注入底层系统！"
 echo "联动标定: 室内光(10Lux) -> 控制栏滑块(30%) -> 物理发光(${P_10}Nit)"
-echo "单调安全: 10240 阶全量程表 + 15 级环境光表严格双向递增，已彻底杜绝样条插值除零异常！"
+echo "单调安全: 全量程表 + 15 级环境光表严格双向递增，已彻底杜绝样条插值除零异常！"

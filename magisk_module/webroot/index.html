@@ -701,6 +701,37 @@
             </div>
         </div>
 
+        <!-- 诊断日志系统控制卡片 -->
+        <div class="hdr-card">
+            <div class="hdr-header">
+                <div class="hdr-title">
+                    <span>📝 诊断日志系统</span>
+                </div>
+                <div class="hdr-status-badge mono blocked" id="log-badge">
+                    ✅ 日志记录中
+                </div>
+            </div>
+            <div class="hdr-body">
+                <div class="hdr-desc">
+                    全程记录安装校验、开机挂载、看门狗与崩溃现场 (pstore)。<br>
+                    <strong>即使设备卡在开机 logo，日志也已落盘</strong>：恢复开机后（看门狗连续 2 次异常会自动禁用模块放行开机）可在此导出 module.log 提交开发者定位根源。<br>
+                    <strong>默认开启</strong>，关闭后所有脚本静默运行。
+                </div>
+                <label class="switch-box" title="点击切换日志开关">
+                    <input type="checkbox" id="log-switch" checked onchange="toggleLogSystem(this.checked)">
+                    <span class="switch-slider"></span>
+                </label>
+            </div>
+            <div style="display:flex; gap:10px; padding: 0 16px 16px;">
+                <button class="btn btn-secondary" style="flex:1;" onclick="exportModuleLog()">
+                    <span>📤</span> 导出日志文件
+                </button>
+                <button class="btn btn-danger" style="flex:1;" onclick="clearModuleLog()">
+                    <span>🗑️</span> 清空日志
+                </button>
+            </div>
+        </div>
+
         <!-- 快捷操作栏 -->
         <div class="actions-card">
             <button class="btn btn-secondary" id="btn-test-preview" onclick="testCurrentCurve()">
@@ -1462,15 +1493,109 @@
             }
         }
 
+        // ==================== 诊断日志系统控制 ====================
+        const MODULE_DIR = '/data/adb/modules/tb522fu_brightness_fix';
+
+        // 防阻塞守卫: ksu.exec 回调在个别环境下可能永不应答, 超时后走降级路径
+        function withTimeout(promise, ms, fallbackValue) {
+            return Promise.race([
+                promise,
+                new Promise(resolve => setTimeout(() => resolve(fallbackValue), ms))
+            ]);
+        }
+
+        function setLogUi(enabled) {
+            const sw = document.getElementById('log-switch');
+            const badge = document.getElementById('log-badge');
+            if (sw) sw.checked = enabled;
+            if (badge) {
+                if (enabled) {
+                    badge.className = "hdr-status-badge mono blocked";
+                    badge.innerText = "✅ 日志记录中";
+                } else {
+                    badge.className = "hdr-status-badge mono unblocked";
+                    badge.innerText = "⚪ 日志已关闭";
+                }
+            }
+        }
+
+        async function loadLogState() {
+            try {
+                const res = await withTimeout(ksuExec(`test -f ${MODULE_DIR}/.log_disabled && echo disabled || echo enabled`), 8000, null);
+                setLogUi(!(res && res.stdout && res.stdout.trim() === 'disabled'));
+            } catch (e) {
+                console.warn("load log state failed:", e);
+            }
+        }
+
+        async function toggleLogSystem(enabled) {
+            try {
+                if (enabled) {
+                    await ksuExec(`rm -f ${MODULE_DIR}/.log_disabled`);
+                    log("诊断日志已开启 (默认)");
+                } else {
+                    await ksuExec(`touch ${MODULE_DIR}/.log_disabled`);
+                    log("诊断日志已关闭, 所有脚本将静默运行");
+                }
+                setLogUi(enabled);
+                ksuToast(enabled ? "诊断日志已开启" : "诊断日志已关闭");
+            } catch (e) {
+                log("日志开关设置失败: " + (e.message || e));
+            }
+        }
+
+        async function exportModuleLog() {
+            try {
+                const res = await withTimeout(ksuExec(`cat ${MODULE_DIR}/logs/module.log 2>/dev/null`), 15000, null);
+                const content = res && res.stdout ? res.stdout : '';
+                if (!content.trim()) {
+                    ksuToast("暂无日志内容");
+                    log("日志文件为空或不存在");
+                    return;
+                }
+                // 优先触发浏览器下载, 同时尝试复制到剪贴板双保险
+                try {
+                    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = 'tb522fu_module_log_' + new Date().toISOString().slice(0, 10) + '.txt';
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+                } catch (e) {
+                    console.warn("log download failed:", e);
+                }
+                try { if (navigator.clipboard) navigator.clipboard.writeText(content); } catch (e) {}
+                log(`已导出 ${content.split('\n').length} 行日志 (下载文件 + 剪贴板)`);
+                ksuToast("日志已导出: 下载文件 + 已复制剪贴板");
+            } catch (e) {
+                log("导出日志失败: " + (e.message || e));
+            }
+        }
+
+        async function clearModuleLog() {
+            if (!confirm("确定清空模块诊断日志？清空后无法恢复。")) return;
+            try {
+                await ksuExec(`> ${MODULE_DIR}/logs/module.log`);
+                log("诊断日志已清空");
+                ksuToast("日志已清空");
+            } catch (e) {
+                log("清空日志失败: " + (e.message || e));
+            }
+        }
+
         window.addEventListener('DOMContentLoaded', async () => {
             if (typeof ksu !== 'undefined' && ksu.fullScreen) {
                 ksu.fullScreen(true);
             }
             applyTheme(userTheme);
             renderAnchorCards();
-            await loadCustomPoints();
+            loadLogState();
             refreshStatus();
             checkHdrStatus();
+            // 曲线加载与设备状态刷新互不阻塞, 并加超时守卫防止卡在加载界面
+            await withTimeout(loadCustomPoints(), 12000, null);
 
             // 启动 1 秒实时动态刷新传感器照度、硬件背光与滑块位置
             setInterval(refreshStatus, 1000);

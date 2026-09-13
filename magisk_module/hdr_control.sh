@@ -3,6 +3,7 @@
 # 支持在 WebUI 中免重启热切换
 
 MODDIR=${0%/*}
+. "$MODDIR/logger.sh" 2>/dev/null
 ACTION="${1:-status}"
 
 case "$ACTION" in
@@ -33,6 +34,8 @@ case "$ACTION" in
         touch "$MODDIR/.hdr_blocked"
         rm -f "$MODDIR/.hdr_unblocked"
 
+        blog "HDR" "用户操作: 开启系统级 HDR 屏蔽 (1,2,3,4 + UHDR off)"
+        blog_sync
         echo '{"success":true,"blocked":true,"message":"已开启系统级 HDR 屏蔽，LCD 全局背光压暗已消除"}'
         ;;
 
@@ -50,6 +53,8 @@ case "$ACTION" in
         touch "$MODDIR/.hdr_unblocked"
         rm -f "$MODDIR/.hdr_blocked"
 
+        blog "HDR" "用户操作: 恢复系统原生 HDR 支持"
+        blog_sync
         echo '{"success":true,"blocked":false,"message":"已恢复系统原生 HDR 支持"}'
         ;;
 

@@ -34,6 +34,14 @@
 8. **屏幕硬件配置 ID 动态嗅探与全自适应（Dynamic Display ID Matching）**：
    * 彻底解除对特定屏幕面板文件名（如 `display_id_4630947077023927187.xml`）的硬编码死绑；
    * 安装器、开机挂载引擎及曲线热套用引擎全部升级为动态通配探测，自动匹配目标系统中真实的硬件面板配置文件名，跨屏幕供应商批次与跨机型自适应通用。
+9. **设备原版为基重建与挂载前 Schema 嗅探（Device-Base Rebuild & Schema Guard）**：
+   * 安装时不再直接挂载模块内置的静态抓取文件，而是**以当前设备自己的原版 XML 为底稿**注入标定，从根源上消除跨批次/跨固件亮度表结构（级别数、`lux_table`、`screenBrightnessMap`）不匹配导致的开机卡 Logo 风险；
+   * 每次开机挂载前双向校验模块文件与设备目标文件的结构标记与亮度表级别数（`max`/`min`），任一不符即自动跳过该项挂载并记录日志；
+   * 面板配置仅精确挂载安装时嗅探到的真实面板文件（`.panel_name` 映射），不再全量覆盖设备上所有 `display_id_*.xml`。
+10. **全链路诊断日志系统（Diagnostics Logging，默认开启）**：
+   * 安装、开机挂载（post-fs-data 最早阶段）、看门狗判定、曲线对齐、HDR 策略全部落盘至 `logs/module.log`，**即使设备卡在开机 Logo 日志也已写入 /data**；
+   * 检测到上一次启动异常时，自动转储 pstore/ramoops 内核崩溃现场关键字段，恢复开机后可直接定位卡 Logo 根源；
+   * WebUI 提供日志开关（默认开启）、一键导出（下载文件 + 复制剪贴板）与清空；日志自动轮转防膨胀，关闭后所有脚本静默运行。
 
 ---
 
@@ -48,8 +56,9 @@ Lenovo-TB522FU-Brightness-Fix/
 ├── build_zip.sh                    # 本地一键打包 Magisk / KernelSU 即刷包脚本
 └── magisk_module/                  # KernelSU / APatch / Magisk 模块工程目录
     ├── module.prop                 # 模块元数据定义
-    ├── customize.sh                # 刷入前环境嗅探与真实面板 ID 动态绑定脚本
-    ├── post-fs-data.sh             # 开机看门狗探测、SELinux 规整与动态 ID 多级 XML 挂载
+    ├── logger.sh                   # 共享诊断日志组件 (轮转/崩溃现场转储/开关判定)
+    ├── customize.sh                # 刷入前环境嗅探、以设备原版为基重建与真实面板 ID 动态绑定脚本
+    ├── post-fs-data.sh             # 开机看门狗、崩溃现场转储、Schema 嗅探与动态 ID 多级 XML 挂载
     ├── service.sh                  # 开机平稳运行检测与 HDR 策略状态恢复机制
     ├── hdr_control.sh              # WebUI 系统级 HDR 屏蔽/恢复热切换控制引擎
     ├── apply_curve.sh              # 10240 阶单调递增曲线计算与热套用引擎
@@ -75,6 +84,17 @@ Lenovo-TB522FU-Brightness-Fix/
    * **实时数据微型条**：实时查看当前环境光（Lux）、物理背光阶数与滑块位置；
    * **交互式调光画布**：可自由拖动暗室、室内、明亮、户外 4 个关键锚点；
    * **一键套用 / 恢复**：支持临时测试、永久应用或一键恢复基准曲线。
+
+---
+
+## 🛟 卡开机 Logo 自救与日志反馈
+
+若刷入后设备卡在开机 Logo，请按以下步骤处理并反馈：
+
+1. **强制重启 2~3 次**：开机看门狗会在累计 2 次启动异常后自动熔断禁用本模块（不卸载、只跳过挂载），设备即可正常开机；
+2. 正常开机后进入管理器模块页面，打开本模块 **WebUI → 诊断日志系统 → 导出日志文件**，将导出的 `tb522fu_module_log_*.txt` 发给开发者；
+3. 若设备始终无法开机，可在 Recovery / 文件管理器中直接取出 `/data/adb/modules/tb522fu_brightness_fix/logs/module.log`，或创建空文件 `/data/adb/modules/tb522fu_brightness_fix/disable` 手动禁用模块；
+4. 日志中包含每一次挂载的成功/跳过/失败原因、亮度表级别数对比、面板文件名映射与上一次启动的内核崩溃现场（pstore），是定位跨批次兼容性问题的关键依据。
 
 ---
 
