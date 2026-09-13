@@ -1587,22 +1587,25 @@
                     log("日志文件为空或不存在");
                     return;
                 }
-                // 优先触发浏览器下载, 同时尝试复制到剪贴板双保险
+                // WebView 里 blob 下载不可靠, 直接以 root 落盘到 /sdcard/Download, 剪贴板作为双保险
+                const fname = 'tb522fu_module_log_' + new Date().toISOString().slice(0, 10) + '.txt';
+                let savedPath = '';
                 try {
-                    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-                    const a = document.createElement('a');
-                    a.href = URL.createObjectURL(blob);
-                    a.download = 'tb522fu_module_log_' + new Date().toISOString().slice(0, 10) + '.txt';
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+                    const wres = await withTimeout(ksuExec(
+                        `cat > /sdcard/Download/${fname} << 'TB522FU_LOG_EOF'\n${content}\nTB522FU_LOG_EOF\nchmod 644 /sdcard/Download/${fname} && echo OK`
+                    ), 15000, null);
+                    if (wres && wres.stdout && wres.stdout.includes('OK')) savedPath = `/sdcard/Download/${fname}`;
                 } catch (e) {
-                    console.warn("log download failed:", e);
+                    console.warn("log save failed:", e);
                 }
                 try { if (navigator.clipboard) navigator.clipboard.writeText(content); } catch (e) {}
-                log(`已导出 ${content.split('\n').length} 行日志 (下载文件 + 剪贴板)`);
-                ksuToast("日志已导出: 下载文件 + 已复制剪贴板");
+                if (savedPath) {
+                    log(`已导出 ${content.split('\n').length} 行日志到 ${savedPath} (并已复制剪贴板)`);
+                    ksuToast(`日志已保存: ${savedPath}`);
+                } else {
+                    log(`已导出 ${content.split('\n').length} 行日志 (仅剪贴板, 落盘失败)`);
+                    ksuToast("日志已复制到剪贴板 (落盘失败)");
+                }
             } catch (e) {
                 log("导出日志失败: " + (e.message || e));
             }
