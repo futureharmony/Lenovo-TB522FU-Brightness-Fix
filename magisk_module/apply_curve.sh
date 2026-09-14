@@ -9,6 +9,11 @@ MODDIR="${TB_MODULE_DIR:-/data/adb/modules/tb522fu_brightness_fix}"
 
 # _do_mount <描述> <src> <dst>
 _do_mount() {
+    # 如果在模块安装器环境 (modules_update 或传入了 TB_MODULE_DIR), 跳过实时 bind 挂载, 仅完成磁盘文件标定写入
+    if [ -n "$TB_MODULE_DIR" ] || echo "$MODDIR" | grep -q "modules_update"; then
+        blog "MOUNT" "安装器/暂存环境: 跳过实时 bind 挂载 (由 post-fs-data 开机执行): $1"
+        return 0
+    fi
     if [ ! -f "$2" ] || [ ! -f "$3" ]; then
         blog "MOUNT" "跳过: $1 (src 或 dst 不存在)"
         return 1
@@ -35,12 +40,68 @@ ORIG_XML="/system/etc/display_brightness_config_common.xml"
 TARGET_XML="$MODDIR/system/etc/display_brightness_config_common.xml"
 ORIG_PD_XML="/my_product/vendor/etc/display_brightness_config_P_D.xml"
 TARGET_PD_XML="$MODDIR/my_product/vendor/etc/display_brightness_config_P_D.xml"
-SYS_DISP=$(ls /vendor/etc/displayconfig/display_id_*.xml 2>/dev/null | head -n 1)
-ORIG_DISP_XML="${SYS_DISP:-/vendor/etc/displayconfig/display_id_4630947077023927187.xml}"
-TARGET_DISP_XML="$MODDIR/vendor/etc/displayconfig/$(basename "$ORIG_DISP_XML")"
-if [ ! -f "$TARGET_DISP_XML" ]; then
-    TARGET_DISP_XML="$MODDIR/vendor/etc/displayconfig/display_id_4630947077023927187.xml"
-fi
+# 智能选定 TB522FU 主屏幕物理面板配置 (与 customize / post-fs-data 严格对齐)
+detect_primary_panel() {
+    local known_primary="/vendor/etc/displayconfig/display_id_4630947077023927187.xml"
+    if [ -f "$known_primary" ]; then
+        echo "$known_primary"
+        return 0
+    fi
+    if [ -f "$MODDIR/.panel_name" ]; then
+        local saved_name=$(cat "$MODDIR/.panel_name" 2>/dev/null | tr -d '\r\n ')
+        if [ -n "$saved_name" ] && [ -f "/vendor/etc/displayconfig/$saved_name" ]; then
+            if grep -q "<highBrightnessMode" "/vendor/etc/displayconfig/$saved_name" 2>/dev/null; then
+                echo "/vendor/etc/displayconfig/$saved_name"
+                return 0
+            fi
+        fi
+    fi
+    if command -v dumpsys >/dev/null 2>&1; then
+        local sys_id=$(dumpsys display 2>/dev/null | grep -oE 'display_id_[0-9]+\.xml' | head -n 1)
+        if [ -n "$sys_id" ] && [ -f "/vendor/etc/displayconfig/$sys_id" ]; then
+            echo "/vendor/etc/displayconfig/$sys_id"
+            return 0
+        fi
+    fi
+    local cand=""
+    for cand in /vendor/etc/displayconfig/display_id_*.xml; do
+        [ -f "$cand" ] || continue
+        if grep -q "<highBrightnessMode" "$cand" 2>/dev/null && grep -q "<sdrHdrRatioMap" "$cand" 2>/dev/null; then
+            echo "$cand"
+            return 0
+        fi
+    done
+    for cand in /vendor/etc/displayconfig/display_id_*.xml; do
+        [ -f "$cand" ] || continue
+        if grep -q '<screenBrightnessMap interpolation="linear">' "$cand" 2>/dev/null; then
+            echo "$cand"
+            return 0
+        fi
+    done
+    local best_cfg=""
+    local max_size=0
+    for cand in /vendor/etc/displayconfig/display_id_*.xml; do
+        [ -f "$cand" ] || continue
+        local sz=$(wc -c < "$cand" 2>/dev/null || echo 0)
+        case "$sz" in ''|*[!0-9]*) sz=0 ;; esac
+        if [ "$sz" -gt "$max_size" ]; then
+            max_size="$sz"
+            best_cfg="$cand"
+        fi
+    done
+    if [ -n "$best_cfg" ]; then
+        echo "$best_cfg"
+        return 0
+    fi
+    return 1
+}
+
+PANEL_CFG=$(detect_primary_panel)
+ORIG_DISP_XML="${PANEL_CFG:-/vendor/etc/displayconfig/display_id_4630947077023927187.xml}"
+REAL_PANEL_NAME=$(basename "$ORIG_DISP_XML")
+mkdir -p "$MODDIR/vendor/etc/displayconfig" 2>/dev/null
+echo "$REAL_PANEL_NAME" > "$MODDIR/.panel_name" 2>/dev/null
+TARGET_DISP_XML="$MODDIR/vendor/etc/displayconfig/$REAL_PANEL_NAME"
 ORIG_DEF_XML="/system_ext/etc/display_brightness_config_default.xml"
 TARGET_DEF_XML="$MODDIR/system_ext/etc/display_brightness_config_default.xml"
 
@@ -377,7 +438,13 @@ if [ -s "$TARGET_DISP_XML.tmp" ]; then
     chmod 644 "$TARGET_DISP_XML"
     chcon u:object_r:vendor_configs_file:s0 "$TARGET_DISP_XML"
     blog "APPLY" "面板配置标定写入成功 ($(wc -c < "$TARGET_DISP_XML") 字节, $(grep -c '<nits>' "$TARGET_DISP_XML") 个采样点)"
-    _do_mount "面板配置 ($(basename "$ORIG_DISP_XML"))" "$TARGET_DISP_XML" "$ORIG_DISP_XML"
+    for f in "$MODDIR/vendor/etc/displayconfig/"*.xml; do
+        [ -f "$f" ] || continue
+        if [ "$(basename "$f")" != "$REAL_PANEL_NAME" ]; then
+            rm -f "$f"
+        fi
+    done
+    _do_mount "面板配置 ($REAL_PANEL_NAME)" "$TARGET_DISP_XML" "$ORIG_DISP_XML"
 else
     blog "APPLY" "警告: 面板配置标定生成失败 (输出为空), 保留原文件不动"
 fi

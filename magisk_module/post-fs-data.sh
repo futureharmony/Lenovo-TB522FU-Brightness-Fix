@@ -125,25 +125,72 @@ if check_schema_pair "P_D 次级配置" "$SRC_PD" "$TARGET_PD" "<brightness_tabl
     do_bind_mount "P_D 次级配置 (P_D.xml)" "$SRC_PD" "$TARGET_PD"
 fi
 
-# 4. 屏幕面板硬件配置文件 — 仅挂载安装时嗅探到的真实面板文件 (.panel_name),
-#    不再全量覆盖所有 display_id_*.xml, 防止把本机面板标定盖到其他面板配置上导致
-#    vendor 显示服务在开机早期崩溃卡 logo
-SRC_DISP="$MODDIR/vendor/etc/displayconfig/display_id_4630947077023927187.xml"
-PANEL_NAME=$(cat "$MODDIR/.panel_name" 2>/dev/null)
-if [ -z "$PANEL_NAME" ]; then
-    # 旧版本升级兼容: 无 .panel_name 时回退为探测第一个 display_id 文件
-    for target_disp in /vendor/etc/displayconfig/display_id_*.xml; do
-        if [ -f "$target_disp" ]; then
-            PANEL_NAME=$(basename "$target_disp")
-            break
+# 4. 屏幕面板硬件配置文件 — 仅精确挂载 TB522FU 真实主屏物理配置 (.panel_name 智能纠偏)
+#    严禁挂载 DP 副屏/外接投屏配置文件 (如 display_id_4630947039571902850.xml)，
+#    否则会导致 vendor 显示服务在开机早期因参数不匹配崩溃卡 Logo 软重启！
+detect_primary_panel() {
+    # 4.1 首选 TB522FU 原厂已知物理主屏配置文件
+    local known_primary="/vendor/etc/displayconfig/display_id_4630947077023927187.xml"
+    if [ -f "$known_primary" ]; then
+        echo "$known_primary"
+        return 0
+    fi
+
+    # 4.2 若存在 .panel_name，校验其是否真实为主屏 (若原记录为已知副屏 ID 则丢弃纠偏)
+    if [ -f "$MODDIR/.panel_name" ]; then
+        local saved_name=$(cat "$MODDIR/.panel_name" 2>/dev/null | tr -d '\r\n ')
+        if [ -n "$saved_name" ] && [ -f "/vendor/etc/displayconfig/$saved_name" ]; then
+            if grep -q "<highBrightnessMode" "/vendor/etc/displayconfig/$saved_name" 2>/dev/null; then
+                echo "/vendor/etc/displayconfig/$saved_name"
+                return 0
+            fi
+        fi
+    fi
+
+    # 4.3 特征嗅探: 真实内部 OLED 主屏必含 highBrightnessMode 与 sdrHdrRatioMap
+    local cand=""
+    for cand in /vendor/etc/displayconfig/display_id_*.xml; do
+        [ -f "$cand" ] || continue
+        if grep -q "<highBrightnessMode" "$cand" 2>/dev/null && grep -q "<sdrHdrRatioMap" "$cand" 2>/dev/null; then
+            echo "$cand"
+            return 0
         fi
     done
-    if [ -n "$PANEL_NAME" ]; then
-        blog "PANEL" "缺少 .panel_name 记录 (旧版本安装), 回退为探测: $PANEL_NAME"
-    fi
-fi
 
-if [ -n "$PANEL_NAME" ]; then
+    # 4.4 linear 映射
+    for cand in /vendor/etc/displayconfig/display_id_*.xml; do
+        [ -f "$cand" ] || continue
+        if grep -q '<screenBrightnessMap interpolation="linear">' "$cand" 2>/dev/null; then
+            echo "$cand"
+            return 0
+        fi
+    done
+
+    # 4.5 体积最大者兜底 (主屏配置包含完整调光样条与 ramp 参数，远大于 ~1KB 的副屏配置)
+    local best_cfg=""
+    local max_size=0
+    for cand in /vendor/etc/displayconfig/display_id_*.xml; do
+        [ -f "$cand" ] || continue
+        local sz=$(wc -c < "$cand" 2>/dev/null || echo 0)
+        case "$sz" in ''|*[!0-9]*) sz=0 ;; esac
+        if [ "$sz" -gt "$max_size" ]; then
+            max_size="$sz"
+            best_cfg="$cand"
+        fi
+    done
+    if [ -n "$best_cfg" ]; then
+        echo "$best_cfg"
+        return 0
+    fi
+
+    return 1
+}
+
+PANEL_CFG=$(detect_primary_panel)
+if [ -n "$PANEL_CFG" ] && [ -f "$PANEL_CFG" ]; then
+    PANEL_NAME=$(basename "$PANEL_CFG")
+    echo "$PANEL_NAME" > "$MODDIR/.panel_name" 2>/dev/null
+
     PANEL_COUNT=0
     PANEL_LIST=""
     for f in /vendor/etc/displayconfig/display_id_*.xml; do
@@ -151,18 +198,27 @@ if [ -n "$PANEL_NAME" ]; then
         PANEL_COUNT=$((PANEL_COUNT + 1))
         PANEL_LIST="$PANEL_LIST $(basename "$f")"
     done
-    blog "PANEL" "设备面板配置探测: 共 $PANEL_COUNT 个 ->$PANEL_LIST (本次挂载目标: $PANEL_NAME)"
+    blog "PANEL" "设备面板配置探测: 共 $PANEL_COUNT 个 ->$PANEL_LIST (智能锁定主屏目标: $PANEL_NAME)"
 
-    TARGET_DISP="/vendor/etc/displayconfig/$PANEL_NAME"
-    SRC_BY_NAME="$MODDIR/vendor/etc/displayconfig/$PANEL_NAME"
-    if [ -f "$SRC_BY_NAME" ]; then
-        SRC_DISP="$SRC_BY_NAME"
+    # 防御清理: 移除非主屏的模块残留文件，杜绝 Magisk Magic Mount 误将副屏覆盖
+    for f in "$MODDIR/vendor/etc/displayconfig/"*.xml; do
+        [ -f "$f" ] || continue
+        if [ "$(basename "$f")" != "$PANEL_NAME" ]; then
+            rm -f "$f"
+            blog "PANEL" "已清理模块内残留的非主屏配置: $(basename "$f")"
+        fi
+    done
+
+    TARGET_DISP="$PANEL_CFG"
+    SRC_DISP="$MODDIR/vendor/etc/displayconfig/$PANEL_NAME"
+    if [ ! -f "$SRC_DISP" ]; then
+        SRC_DISP="$MODDIR/vendor/etc/displayconfig/display_id_4630947077023927187.xml"
     fi
     if check_schema_pair "面板配置 ($PANEL_NAME)" "$SRC_DISP" "$TARGET_DISP" "screenBrightnessMap"; then
         do_bind_mount "面板配置 ($PANEL_NAME)" "$SRC_DISP" "$TARGET_DISP"
     fi
 else
-    blog "PANEL" "警告: 未找到任何 display_id_*.xml, 跳过面板配置挂载"
+    blog "PANEL" "警告: 未找到任何有效的主屏幕 display_id_*.xml, 跳过面板配置挂载"
 fi
 
 blog_sync

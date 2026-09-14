@@ -24,22 +24,74 @@ _ilog "WebView 供应商: ${WV_INSTALL_INFO:-未获取到 (可能缺少 WebView 
 
 ui_print "- 正在进行前置环境与 ColorOS 调光机制嗅探..."
 
-# 1. 硬件面板配置动态嗅探与自适应
-PANEL_CFG=""
-for cfg in /vendor/etc/displayconfig/display_id_*.xml; do
-    if [ -f "$cfg" ]; then
-        PANEL_CFG="$cfg"
-        break
+# 1. 硬件面板配置动态嗅探与自适应 (智能选定 TB522FU 主屏幕物理面板)
+# TB522FU 原厂 OLED 物理主屏配置为 display_id_4630947077023927187.xml
+# 必须杜绝按字母排序盲目取首个文件导致误选中 DP 副屏/外部投屏配置 (如 display_id_4630947039571902850.xml) 引发开机卡 Logo！
+detect_primary_panel() {
+    # 1.1 首选已知主屏: TB522FU 原厂 OLED 物理主屏
+    local known_primary="/vendor/etc/displayconfig/display_id_4630947077023927187.xml"
+    if [ -f "$known_primary" ]; then
+        echo "$known_primary"
+        return 0
     fi
-done
 
-if [ -z "$PANEL_CFG" ]; then
+    # 1.2 运行期 dumpsys 探测 (若在已开机系统内刷入)
+    if command -v dumpsys >/dev/null 2>&1; then
+        local sys_id=$(dumpsys display 2>/dev/null | grep -oE 'display_id_[0-9]+\.xml' | head -n 1)
+        if [ -n "$sys_id" ] && [ -f "/vendor/etc/displayconfig/$sys_id" ]; then
+            echo "/vendor/etc/displayconfig/$sys_id"
+            return 0
+        fi
+    fi
+
+    # 1.3 特征嗅探: 真实内部 OLED 主屏必含 highBrightnessMode 与 sdrHdrRatioMap (DP/虚拟副屏不含)
+    local cand=""
+    for cand in /vendor/etc/displayconfig/display_id_*.xml; do
+        [ -f "$cand" ] || continue
+        if grep -q "<highBrightnessMode" "$cand" 2>/dev/null && grep -q "<sdrHdrRatioMap" "$cand" 2>/dev/null; then
+            echo "$cand"
+            return 0
+        fi
+    done
+
+    # 1.4 特征嗅探 2: 含有 linear screenBrightnessMap
+    for cand in /vendor/etc/displayconfig/display_id_*.xml; do
+        [ -f "$cand" ] || continue
+        if grep -q '<screenBrightnessMap interpolation="linear">' "$cand" 2>/dev/null; then
+            echo "$cand"
+            return 0
+        fi
+    done
+
+    # 1.5 体积最大者兜底 (主屏配置包含完整调光样条与 ramp 参数，远大于 ~1KB 的副屏配置)
+    local best_cfg=""
+    local max_size=0
+    for cand in /vendor/etc/displayconfig/display_id_*.xml; do
+        [ -f "$cand" ] || continue
+        local sz=$(wc -c < "$cand" 2>/dev/null || echo 0)
+        case "$sz" in ''|*[!0-9]*) sz=0 ;; esac
+        if [ "$sz" -gt "$max_size" ]; then
+            max_size="$sz"
+            best_cfg="$cand"
+        fi
+    done
+    if [ -n "$best_cfg" ]; then
+        echo "$best_cfg"
+        return 0
+    fi
+
+    return 1
+}
+
+PANEL_CFG=$(detect_primary_panel)
+
+if [ -z "$PANEL_CFG" ] || [ ! -f "$PANEL_CFG" ]; then
     ui_print "❌ [错误] 未在 /vendor/etc/displayconfig/ 中检测到任何屏幕面板配置！"
     ui_print "👉 本模块需要设备具备标准的 DisplayDeviceConfig 屏幕配置文件。"
     ui_print "👉 为防止屏幕背光与调光异常，已安全中止刷入！"
     abort "未检测到屏幕配置文件，终止安装。"
 fi
-_ilog "  [✓] 硬件面板校验通过: 检测到真实屏幕配置 $(basename "$PANEL_CFG")"
+_ilog "  [✓] 硬件面板校验通过: 锁定主屏配置 $(basename "$PANEL_CFG")"
 
 # 2. 系统版本与架构指纹校验 (确认是 ColorOS / Oplus 架构)
 IS_OPLUS=false
@@ -140,18 +192,19 @@ else
     _ilog "  [⚠] 设备无 P_D.xml 或结构不符, 已跳过该文件挂载 (不影响开机)"
 fi
 
-# 6.4 屏幕面板配置 — 复制设备自己的原版面板文件 (内容与文件名均以设备为准)
+# 6.4 屏幕面板配置 — 复制设备自己的原版主屏幕面板文件 (内容与文件名均以设备为准)
 mkdir -p "$MP/vendor/etc/displayconfig"
+# 清理可能残留的错误面板 XML (如旧版本误嗅探的 DP 副屏配置)，避免 Magisk Magic Mount 误挂
+rm -f "$MP/vendor/etc/displayconfig/"*.xml
 REAL_PANEL_NAME=$(basename "$PANEL_CFG")
 if grep -q "<screenBrightnessMap" "$PANEL_CFG" 2>/dev/null; then
     cp -f "$PANEL_CFG" "$MP/vendor/etc/displayconfig/$REAL_PANEL_NAME"
-    _ilog "  [✓] 面板配置已基于设备原版重建: $REAL_PANEL_NAME"
+    _ilog "  [✓] 主屏面板配置已基于设备原版重建: $REAL_PANEL_NAME ($(wc -c < "$PANEL_CFG") 字节)"
 else
-    rm -f "$MP/vendor/etc/displayconfig/"*.xml
     _ilog "  [⚠] 设备面板配置缺少 <screenBrightnessMap>, 已跳过该文件挂载 (不影响开机)"
 fi
 echo "$REAL_PANEL_NAME" > "$MP/.panel_name"
-_ilog "  [✓] 面板文件名映射已记录 (.panel_name): $REAL_PANEL_NAME"
+_ilog "  [✓] 主屏面板文件名映射已锁定 (.panel_name): $REAL_PANEL_NAME"
 
 # ============ 7. 基于设备原版执行首次标定注入 ============
 TB_MODULE_DIR="$MP" sh "$MP/apply_curve.sh" balanced >/dev/null 2>&1
