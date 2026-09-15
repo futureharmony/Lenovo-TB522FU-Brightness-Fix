@@ -95,34 +95,76 @@
         <lux>80101 ,600</lux>
     </hbm_lux_table>
 
-        <lux_table id="3">
+    <lux_table id="3">
         <!-- lux level, nit values -->
-        <lux>0   ,20.0 </lux>
-        <lux>2   ,60.0 </lux>
-        <lux>4   ,120.0</lux>
-        <lux>6   ,200.0</lux>
-        <lux>8   ,280.0</lux>
-        <lux>10  ,345.0</lux>
-        <lux>20  ,350.0</lux>
-        <lux>40  ,355.0</lux>
-        <lux>60  ,360.0</lux>
-        <lux>80  ,365.0</lux>
-        <lux>100 ,370.0</lux>
-        <lux>200 ,400.0</lux>
-        <lux>500 ,450.0</lux>
-        <lux>1000,490.0</lux>
-        <lux>5000,525.0</lux>
-        <lux>8600,550.0</lux>
+        <lux>   0   , 2.5</lux>
+        <lux>   2   , 10 </lux>
+        <lux>   4   , 18 </lux>
+        <lux>   6   , 23 </lux>
+        <lux>   8   , 29 </lux>
+        <lux>  10   , 35 </lux>
+        <lux>  15   , 48 </lux>
+        <lux>  20   , 55 </lux>
+        <lux>  25   , 63 </lux>
+        <lux>  30   , 68 </lux>
+        <lux>  35   , 73 </lux>
+        <lux>  40   , 75 </lux>
+        <lux>  45   , 78 </lux>
+        <lux>  50   , 82 </lux>
+        <lux>  55   , 86 </lux>
+        <lux>  60   , 90 </lux>
+        <lux>  65   , 93 </lux>
+        <lux>  70   , 97 </lux>
+        <lux>  75   ,100 </lux>
+        <lux>  80   ,102 </lux>
+        <lux>  95   ,104 </lux>
+        <lux> 100   ,106 </lux>
+        <lux> 120   ,109 </lux>
+        <lux> 140   ,112 </lux>
+        <lux> 160   ,115 </lux>
+        <lux> 180   ,118 </lux>
+        <lux> 200   ,122 </lux>
+        <lux> 220   ,125 </lux>
+        <lux> 240   ,128 </lux>
+        <lux> 260   ,130 </lux>
+        <lux> 280   ,131 </lux>
+        <lux> 300   ,132 </lux>
+        <lux> 320   ,133 </lux>
+        <lux> 340   ,133 </lux>
+        <lux> 360   ,134 </lux>
+        <lux> 380   ,134 </lux>
+        <lux> 400   ,136 </lux>
+        <lux> 420   ,136 </lux>
+        <lux> 440   ,138 </lux>
+        <lux> 460   ,138 </lux>
+        <lux> 480   ,139 </lux>
+        <lux> 500   ,139 </lux>
+        <lux> 700   ,163 </lux>
+        <lux> 900   ,186 </lux>
+        <lux>1100   ,210 </lux>
+        <lux>1300   ,220 </lux>
+        <lux>1500   ,235 </lux>
+        <lux>1700   ,255 </lux>
+        <lux>1900   ,270 </lux>
+        <lux>2000   ,280 </lux>
+        <lux>2500   ,290 </lux>
+        <lux>3000   ,310 </lux>
+        <lux>3500   ,330 </lux>
+        <lux>4000   ,355 </lux>
+        <lux>4500   ,380 </lux>
+        <lux>5000   ,408 </lux>
+        <lux>6000   ,435 </lux>
+        <lux>8600   ,500 </lux>
     </lux_table>
 
     <!-- add for hbm lux level of nit look up tables.  -->
-        <hbm_lux_table id="3">
+    <hbm_lux_table id="3">
         <!-- lux level, nit values -->
-        <lux>10101,600.0</lux>
-        <lux>30101,680.0</lux>
-        <lux>50101,730.0</lux>
-        <lux>70101,770.0</lux>
-        <lux>80101,800.0</lux>
+        <lux>10101 ,600</lux>
+        <lux>30101 ,650</lux>
+        <lux>40101 ,700</lux>
+        <lux>60101 ,750</lux>
+        <lux>80101 ,750</lux>
     </hbm_lux_table>
 
     <lux_table id="4">
@@ -2211,12 +2253,12 @@
     <!-- add for hbm lux level of nit look up tables.  -->
     <hbm_lux_table id="43">
         <!-- lux level, nit values -->
-        <lux>20000,660</lux>
-        <lux>30000,720</lux>
-        <lux>40000,780</lux>
-        <lux>50000,840</lux>
-        <lux>60000,900</lux>
-        <lux>70000,950</lux>
+        <lux>20000,600</lux>
+        <lux>30000,640</lux>
+        <lux>40000,680</lux>
+        <lux>50000,710</lux>
+        <lux>60000,735</lux>
+        <lux>70000,750</lux>
     </hbm_lux_table>
 
     <lux_table id="44">

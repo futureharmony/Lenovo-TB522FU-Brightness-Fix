@@ -490,6 +490,28 @@
             min-width: 55px;
         }
 
+        .anchor-range {
+            font-size: 10px;
+            text-align: center;
+            color: var(--text-muted);
+        }
+
+        .anchor-range.locked {
+            color: var(--amber);
+        }
+
+        .anchor-note {
+            margin-top: 12px;
+            padding: 10px 12px;
+            border: 1px solid var(--border-subtle);
+            border-left: 3px solid var(--amber);
+            border-radius: var(--radius-md);
+            background: var(--bg);
+            font-size: 11px;
+            line-height: 1.7;
+            color: var(--text-secondary);
+        }
+
         .hdr-card {
             background: var(--surface);
             border: 1px solid var(--border);
@@ -676,6 +698,16 @@
             <div class="anchors-grid" id="anchors-grid">
                 <!-- JS 动态渲染 -->
             </div>
+
+            <div class="anchor-note mono">
+                🔒 <b>端点平台限制说明</b>：<br>
+                • <b>极暗底线 (0 Lux)</b> 锁定 <b>2 ~ 80N</b>：低于/高于该区间会触发极暗 PWM 闪烁与 AOD 异常，属平台最暗保护，不可随意调节。<br>
+                • <b>强光满格 (8600 Lux)</b> 锁定 <b>400 ~ 782N</b>：<b>782N 为常规 SDR 上限</b>，超出将进入 HBM 阳光模式，普通曲线无法控制（会自动回弹到 782N）。<br>
+                • 中间锚点可自由调节，但会被夹在相邻锚点之间且不超过 782N。<br>
+                • <b>曲线强制严格单调</b>（滑块越大发光越高）：编辑时即被约束，强光满格不会低于中间锚点，杜绝倒挂。<br>
+                • 保存后底层背光按 <b>nit / 782 × 4095</b> 线性写入，与「实时试戴」完全一致。<br>
+                • 建议「强光满格」保持 <b>782N</b>：此时所有锚点即为真实光学 nit；若设为更低值，整条曲线会按比例缩放（顶格仍输出面板最大亮度）。
+            </div>
         </div>
 
         <!-- LCD HDR 智能屏蔽控制卡片 -->
@@ -754,7 +786,54 @@
 
     <script>
         const MAX_NIT = 1100.0;     // 硬件峰值极值 1100 Nit (HBM)
-        const MAX_SDR_NIT = 782.0; // 常规模式上限 782 Nit
+        const MAX_SDR_NIT = 782.0; // 常规模式上限 782 Nit (超出进入 HBM 阳光模式, 普通曲线不可控)
+        // ===== 端点硬限制 (与底层 apply_curve.sh 严格一致) =====
+        const DARK_FLOOR  = 2.0;   // 极暗底线最低值
+        const DARK_CEIL   = 80.0;  // 极暗底线最高值 (最暗保护: 防极暗 PWM 闪烁 / AOD 异常)
+        const BRIGHT_FLOOR = 400.0;// 强光满格最低值
+        const BRIGHT_CEIL  = MAX_SDR_NIT; // 强光满格最高值 = 782 常规 SDR 上限
+        const ANCHOR_GAP = 5;      // 相邻锚点最小间隔 (N)
+        function clampNit(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+
+        // 计算某锚点在「严格单调 + 端点平台限制」下的合法 nit 区间。
+        // 关键: 强光满格下限必须 >= 前一锚点 + 间隔, 杜绝「末点比中间还暗」的倒挂。
+        function pointBounds(idx) {
+            const n = points.length;
+            if (idx === 0) {
+                const hi = Math.max(DARK_FLOOR, Math.min(DARK_CEIL, points[1].nit - ANCHOR_GAP));
+                return { lo: DARK_FLOOR, hi: hi };
+            }
+            if (idx === n - 1) {
+                const lo = Math.min(BRIGHT_CEIL, Math.max(BRIGHT_FLOOR, points[n - 2].nit + ANCHOR_GAP));
+                return { lo: lo, hi: BRIGHT_CEIL };
+            }
+            return {
+                lo: points[idx - 1].nit + ANCHOR_GAP,
+                hi: Math.min(points[idx + 1].nit - ANCHOR_GAP, BRIGHT_CEIL)
+            };
+        }
+
+        // 全局兜底归一化: 强制严格单调 + 端点区间 (用于预设/保存/任何编辑之后)
+        function normalizeCurve() {
+            const n = points.length;
+            points[0].slider = 0;
+            points[n - 1].slider = 100;
+            points[0].nit = clampNit(points[0].nit, DARK_FLOOR, DARK_CEIL);
+            points[n - 1].nit = clampNit(points[n - 1].nit, BRIGHT_FLOOR, BRIGHT_CEIL);
+            for (let i = 1; i < n; i++) {
+                if (points[i].nit < points[i - 1].nit + ANCHOR_GAP) points[i].nit = points[i - 1].nit + ANCHOR_GAP;
+            }
+            if (points[n - 1].nit > BRIGHT_CEIL) {
+                points[n - 1].nit = BRIGHT_CEIL;
+                for (let i = n - 2; i >= 0; i--) {
+                    if (points[i].nit > points[i + 1].nit - ANCHOR_GAP) points[i].nit = points[i + 1].nit - ANCHOR_GAP;
+                }
+            }
+            points[0].nit = clampNit(points[0].nit, DARK_FLOOR, DARK_CEIL);
+            for (let i = 1; i < n; i++) {
+                if (points[i].nit < points[i - 1].nit + ANCHOR_GAP) points[i].nit = points[i - 1].nit + ANCHOR_GAP;
+            }
+        }
 
         // 曲线控制点数组 [{ slider: X (0~100), nit: Y (0~1100) }]
         let points = [
@@ -1179,21 +1258,20 @@
             let newSlider = pixelXToSlider(pos.x, pad, plotW);
             let newNit = pixelYToNit(pos.y, pad, plotH);
 
+            const nb = pointBounds(activePointIdx);
             if (activePointIdx === 0) {
+                // 极暗底线: 固定 slider=0
                 points[0].slider = 0;
-                points[0].nit = Math.min(80, Math.max(5, newNit));
             } else if (activePointIdx === points.length - 1) {
+                // 强光满格: 固定 slider=100
                 points[activePointIdx].slider = 100;
-                points[activePointIdx].nit = Math.min(MAX_NIT, Math.max(700, newNit));
             } else {
                 let prevSlider = points[activePointIdx - 1].slider;
                 let nextSlider = points[activePointIdx + 1].slider;
-                let prevNit = points[activePointIdx - 1].nit;
-                let nextNit = points[activePointIdx + 1].nit;
-
                 points[activePointIdx].slider = Math.min(nextSlider - 4, Math.max(prevSlider + 4, newSlider));
-                points[activePointIdx].nit = Math.min(nextNit - 10, Math.max(prevNit + 10, newNit));
             }
+            // 合法区间已含「严格单调」约束, 末点下限自动 >= 前一锚点
+            points[activePointIdx].nit = clampNit(Math.round(newNit), nb.lo, nb.hi);
 
             const p = points[activePointIdx];
             document.getElementById('interactive-tip').innerHTML = 
@@ -1237,16 +1315,16 @@
             if (!container) return;
             
             const titles = [
-                { name: '极暗底线', tag: '0 Lux' },
-                { name: '舒适微光', tag: '3 Lux' },
-                { name: '室内日常', tag: '10 Lux 核心' },
-                { name: '办公透亮', tag: '50 Lux' },
-                { name: '强光满格', tag: '8600 Lux' }
+                { name: '极暗底线', tag: '0 Lux',    range: `范围 ${DARK_FLOOR}~${DARK_CEIL}N 🔒`, locked: true },
+                { name: '舒适微光', tag: '3 Lux',    range: `范围 ${DARK_FLOOR}~${BRIGHT_CEIL}N`,  locked: false },
+                { name: '室内日常', tag: '10 Lux 核心', range: `范围 ${DARK_FLOOR}~${BRIGHT_CEIL}N`,  locked: false },
+                { name: '办公透亮', tag: '50 Lux',   range: `范围 ${DARK_FLOOR}~${BRIGHT_CEIL}N`,  locked: false },
+                { name: '强光满格', tag: '8600 Lux', range: `范围 ${BRIGHT_FLOOR}~${BRIGHT_CEIL}N 🔒`, locked: true }
             ];
 
             let html = '';
             points.forEach((pt, idx) => {
-                const info = titles[idx] || { name: `节点 ${idx+1}`, tag: '' };
+                const info = titles[idx] || { name: `节点 ${idx+1}`, tag: '', range: '', locked: false };
                 const isHighlight = (idx === 2);
                 html += `
                     <div class="anchor-card ${isHighlight ? 'highlight' : ''}">
@@ -1259,6 +1337,7 @@
                             <span class="anchor-val mono">${pt.nit} N</span>
                             <button class="anchor-btn mono" onclick="stepAnchor(${idx}, 10)">+</button>
                         </div>
+                        <div class="anchor-range mono ${info.locked ? 'locked' : ''}">${info.range}</div>
                     </div>
                 `;
             });
@@ -1267,11 +1346,9 @@
 
         function stepAnchor(idx, delta) {
             if (idx < 0 || idx >= points.length) return;
-            let minLimit = (idx === 0) ? 5 : points[idx-1].nit + 5;
-            let maxLimit = (idx === points.length - 1) ? 1100 : points[idx+1].nit - 5;
-            
+            const nb = pointBounds(idx);
             let target = points[idx].nit + delta;
-            points[idx].nit = Math.min(maxLimit, Math.max(minLimit, target));
+            points[idx].nit = clampNit(target, nb.lo, nb.hi);
             
             renderAnchorCards();
             drawGraph();
@@ -1300,7 +1377,7 @@
                     { slider: 15,  nit: 180 },
                     { slider: 30,  nit: 400 },
                     { slider: 60,  nit: 620 },
-                    { slider: 100, nit: 800 }
+                    { slider: 100, nit: 782 }
                 ];
                 log("已加载【通透偏好预设】：室内 10 Lux ⟶ 滑块 30% ⟶ 400 Nit");
             } else if (type === 'soft') {
@@ -1313,6 +1390,7 @@
                 ];
                 log("已加载【柔和护眼预设】：室内 10 Lux ⟶ 滑块 30% ⟶ 280 Nit");
             }
+            normalizeCurve();
             renderAnchorCards();
             drawGraph();
             renderAnchorCards();
@@ -1326,8 +1404,9 @@
                 { slider: 60,  nit: 550 },
                 { slider: 100, nit: 782 }
             ];
+            normalizeCurve();
             safeStore.removeItem('tb522fu_custom_points');
-            await ksuExec("rm -f /data/adb/modules/tb522fu_brightness_fix/custom_points.json");
+            await ksuExec("rm -f /data/adb/modules/tb522fu_brightness_fix/custom_points.json /data/adb/tb522fu_brightness_fix_data/custom_points.json");
             await ksuExec("/data/adb/modules/tb522fu_brightness_fix/apply_curve.sh balanced");
             document.getElementById('interactive-tip').innerHTML = "已重置为三级联动基准线 (滑块 30% 对应 350 Nit)";
             drawGraph();
@@ -1360,42 +1439,31 @@
         }
 
         async function saveCurveToSystem() {
-            log("正在根据当前自定义曲线采样 15 点底层映射并写入系统...");
+            log("正在对自定义锚点执行保形单调校验并写入底层映射系统...");
 
-            let n0 = points[0].nit;
-            let n10 = evaluateNitAtSlider(points, points[2].slider);
-            let n100 = evaluateNitAtSlider(points, points[3].slider);
-            let n8600 = points[points.length - 1].nit;
+            // 1. 锚点数据安全校验与排序归一化
+            points.sort((a, b) => a.slider - b.slider);
 
-            let p0 = n0;
-            let p2 = Math.round(n0 + (n10 - n0) * 0.35);
-            let p4 = Math.round(n0 + (n10 - n0) * 0.60);
-            let p6 = Math.round(n0 + (n10 - n0) * 0.80);
-            let p8 = Math.round(n0 + (n10 - n0) * 0.92);
-            let p10 = n10;
-            let p15 = Math.round(n10 + (n100 - n10) * 0.20);
-            let p20 = Math.round(n10 + (n100 - n10) * 0.35);
-            let p30 = Math.round(n10 + (n100 - n10) * 0.60);
-            let p50 = Math.round(n10 + (n100 - n10) * 0.85);
-            let p100 = n100;
-            let p500 = Math.round(n100 + (n8600 - n100) * 0.50);
-            let p1000 = Math.round(n100 + (n8600 - n100) * 0.80);
-            let p5000 = Math.round(n100 + (n8600 - n100) * 0.95);
+            // 端点硬限制 + 严格单调归一化 (与底层 apply_curve.sh 一致, 杜绝倒挂)
+            normalizeCurve();
 
-            // 1. 持久化保存用户自定义锚点，解决重启后被硬编码默认值 350 重置的问题
+            // 2. 持久化保存用户自定义锚点
             const pointsJson = JSON.stringify(points);
             safeStore.setItem('tb522fu_custom_points', pointsJson);
             await ksuExec(`echo '${pointsJson}' > /data/adb/modules/tb522fu_brightness_fix/custom_points.json`);
+            // 同步写入独立持久化备份 (模块升级替换模块目录时兜底恢复)
+            await ksuExec(`mkdir -p /data/adb/tb522fu_brightness_fix_data; echo '${pointsJson}' > /data/adb/tb522fu_brightness_fix_data/custom_points.json`);
 
-            // 2. 写入底层 XML 映射系统
-            let cmd = `/data/adb/modules/tb522fu_brightness_fix/apply_curve.sh raw ${p0} ${p2} ${p4} ${p6} ${p8} ${p10} ${p15} ${p20} ${p30} ${p50} ${p100} ${p500} ${p1000} ${p5000} ${n8600}`;
+            // 3. 执行核心标定引擎写入底层 XML 映射系统 (驱动与框架多级安全联动)
+            let cmd = `/data/adb/modules/tb522fu_brightness_fix/apply_curve.sh json /data/adb/modules/tb522fu_brightness_fix/custom_points.json`;
             
             const res = await ksuExec(cmd);
             if (res.stdout) log(res.stdout);
             if (res.stderr) log(res.stderr);
 
             if (res.errno === 0) {
-                ksuToast("曲线配置已永久保存！重启后将自动维持该设置。");
+                ksuToast("曲线配置已永久保存！开机自愈与驱动安全防护已生效。");
+                if (typeof renderChart === 'function') renderChart();
             } else {
                 ksuToast("保存失败，详情请查看控制台日志。");
             }
@@ -1501,6 +1569,7 @@
                     const loaded = JSON.parse(res.stdout.trim());
                     if (Array.isArray(loaded) && loaded.length === 5) {
                         points = loaded;
+                        normalizeCurve();
                         safeStore.setItem('tb522fu_custom_points', JSON.stringify(points));
                         renderAnchorCards();
                         drawGraph();
@@ -1518,6 +1587,7 @@
                     const loaded = JSON.parse(savedLocal);
                     if (Array.isArray(loaded) && loaded.length === 5) {
                         points = loaded;
+                        normalizeCurve();
                         renderAnchorCards();
                         drawGraph();
                         log("从本地缓存恢复自定义曲线 (室内基准: " + points[2].nit + " Nit)");

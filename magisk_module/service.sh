@@ -69,6 +69,18 @@ else
     blog "HDR" "执行用户策略: 恢复系统原生 HDR 支持"
 fi
 
+# ==================== 用户数据持久化备份 (防模块升级丢曲线) ====================
+# 模块升级会整体替换 /data/adb/modules/<id>/, 因此把用户曲线备份到独立目录
+BACKUP_DIR="/data/adb/tb522fu_brightness_fix_data"
+mkdir -p "$BACKUP_DIR" 2>/dev/null
+if [ -f "$MODDIR/custom_points.json" ]; then
+    cp -f "$MODDIR/custom_points.json" "$BACKUP_DIR/custom_points.json" 2>/dev/null
+elif [ -f "$BACKUP_DIR/custom_points.json" ]; then
+    cp -f "$BACKUP_DIR/custom_points.json" "$MODDIR/custom_points.json" 2>/dev/null
+    blog "BACKUP" "模块目录缺少用户曲线, 已从持久化备份恢复"
+fi
+[ -f "$MODDIR/.hdr_unblocked" ] && cp -f "$MODDIR/.hdr_unblocked" "$BACKUP_DIR/.hdr_unblocked" 2>/dev/null
+
 # ==================== 用户自定义曲线开机自愈对齐 ====================
 if [ -f "$MODDIR/custom_points.json" ]; then
     blog "SELF-HEAL" "检测到 custom_points.json, 开始执行开机曲线对齐..."

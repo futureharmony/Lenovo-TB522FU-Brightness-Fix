@@ -1,6 +1,6 @@
 id=tb522fu_brightness_fix
 name=联想拯救者 Y900 自动亮度优化模块
-version=v2.8.3
-versionCode=13
+version=v2.9.0
+versionCode=21
 author=futureharmony
-description=针对联想拯救者 Y900 13英寸二代 (TB522FU) 深度优化 ColorOS 自动亮度映射表，支持 WebUI 自定义曲线持久化与开机自愈，支持 HDR 智能屏蔽，内置开机全程诊断日志，多屏智能锁定物理主屏面板杜绝开机卡死软重启
+description=针对联想拯救者 Y900 13英寸二代 (TB522FU) 深度优化 ColorOS 自动亮度：逆向确认 Oplus 亮度模型评分机制并锁定安全的 ExponentModel，彻底根除大亮度/极端锚点下的样条外推崩溃与无限重启；统一 nit↔物理背光线性映射，使自动亮度与「实时试戴」完全一致；端点平台限制（极暗2~80N / 强光400~782N）与曲线严格单调编辑期防护；修复首次试戴不生效的时序竞态；用户曲线独立持久化备份防升级丢失；支持 WebUI 自定义曲线与实时遥测、HDR 智能屏蔽、开机自愈看门狗与全程诊断日志

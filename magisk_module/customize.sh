@@ -11,6 +11,8 @@ ui_print "***************************************************"
 # 统一安装日志: 同时输出到安装器界面与模块诊断日志 (logs/module.log)
 MP="$MODPATH"
 OLD_DIR="/data/adb/modules/tb522fu_brightness_fix"
+# 用户数据持久化备份目录: 独立于模块目录, 模块升级会整体替换模块目录, 此目录不受影响
+BACKUP_DIR="/data/adb/tb522fu_brightness_fix_data"
 mkdir -p "$MP/logs" 2>/dev/null
 _ilog() {
     ui_print "$1"
@@ -159,6 +161,15 @@ if [ "$MP" != "$OLD_DIR" ] && [ -d "$OLD_DIR" ]; then
     _ilog "  [✓] 已保留上一版本的用户曲线 / HDR 偏好 / 日志开关与诊断日志"
 fi
 
+# 兜底: 若模块目录未携带用户曲线 (旧模块目录已被整体替换), 从持久化备份恢复
+if [ ! -f "$MP/custom_points.json" ] && [ -f "$BACKUP_DIR/custom_points.json" ]; then
+    cp -f "$BACKUP_DIR/custom_points.json" "$MP/custom_points.json" 2>/dev/null
+    _ilog "  [✓] 已从持久化备份恢复用户自定义曲线"
+fi
+if [ ! -f "$MP/.hdr_unblocked" ] && [ -f "$BACKUP_DIR/.hdr_unblocked" ]; then
+    cp -f "$BACKUP_DIR/.hdr_unblocked" "$MP/.hdr_unblocked" 2>/dev/null
+fi
+
 # ============ 6. 以设备原版配置为基重建模块数据文件 (核心防卡标措施) ============
 # 不再直接挂载 zip 内置的静态抓取文件, 而是以当前设备自己的原版 XML 为底稿,
 # 由 apply_curve.sh 在其上注入标定, 从根源上消除跨批次/跨固件结构不匹配风险
@@ -207,7 +218,13 @@ echo "$REAL_PANEL_NAME" > "$MP/.panel_name"
 _ilog "  [✓] 主屏面板文件名映射已锁定 (.panel_name): $REAL_PANEL_NAME"
 
 # ============ 7. 基于设备原版执行首次标定注入 ============
-TB_MODULE_DIR="$MP" sh "$MP/apply_curve.sh" balanced >/dev/null 2>&1
+if [ -f "$MP/custom_points.json" ]; then
+    _ilog "- 检测到历史自定义曲线配置，基于历史曲线注入标定..."
+    TB_MODULE_DIR="$MP" sh "$MP/apply_curve.sh" json "$MP/custom_points.json" >/dev/null 2>&1
+else
+    _ilog "- 首次安装，以官方均衡标定注入基准曲线..."
+    TB_MODULE_DIR="$MP" sh "$MP/apply_curve.sh" balanced >/dev/null 2>&1
+fi
 if [ -s "$MP/system_ext/etc/display_brightness_config_default.xml" ]; then
     _ilog "  [✓] 首次标定注入完成 (详细过程见 logs/module.log)"
 else
